@@ -559,4 +559,52 @@ mod tests {
         assert!(!acc_1.is_own_address(&address_2));
         assert!(!acc_2.is_own_address(&address_1));
     }
+
+    #[test]
+    fn test_deposit() {
+        use crate::proof::prove_tx;
+        use libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::VK;
+        use libzeropool::fawkes_crypto::backend::bellman_groth16::{
+            engines::Bn256, verifier::verify, Parameters,
+        };
+        use libzeropool::POOL_PARAMS;
+        use rand::Rng;
+
+        let state = State::init_test(POOL_PARAMS.clone());
+        let random_u64: u64 = rand::thread_rng().gen();
+        let acc = UserAccount::new(Num::from(random_u64), state, POOL_PARAMS.clone());
+
+        let tx_data = acc
+            .create_tx(
+                TxType::Deposit(
+                    BoundedNum::new(Num::ZERO),
+                    vec![],
+                    BoundedNum::new(Num::ONE),
+                ),
+                None,
+            )
+            .unwrap();
+
+        let params_path = std::env::var("TRANSFER_PARAMS_PATH")
+            .unwrap_or(String::from("../params/transfer_params.bin"));
+
+        let vk_path = std::env::var("VK_PATH")
+            .unwrap_or(String::from("../params/transfer_verification_key.json"));
+
+        let params_data = std::fs::read(params_path).unwrap();
+        let mut params_data_cur = &params_data[..];
+
+        let params = Parameters::<Bn256>::read(&mut params_data_cur, false, false).unwrap();
+
+        let (inputs, snark_proof) =
+            prove_tx(&params, &*POOL_PARAMS, tx_data.public, tx_data.secret);
+
+        let vk_str = std::fs::read_to_string(vk_path).unwrap();
+
+        let vk: VK<Bn256> = serde_json::from_str(&vk_str).unwrap();
+
+        let verification_result = verify(&vk, &snark_proof, &inputs);
+
+        assert!(verification_result);
+    }
 }
