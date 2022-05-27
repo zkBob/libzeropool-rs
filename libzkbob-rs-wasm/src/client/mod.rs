@@ -284,9 +284,11 @@ impl UserAccount {
 
         let txs: Vec<IndexedTx> = serde_wasm_bindgen::from_value(txs.unchecked_into())?;
 
-        let mut other_tx_start_index: Option<u64> = None;
-        let mut other_tx_commitments: Vec<Num<Fr>> = Vec::new();
-        let mut decrypted_memos: Vec<DecMemo> = Vec::new();     
+        let mut decrypted_memos: Vec<DecMemo> = Vec::new(); 
+        let mut new_leafs: Vec<(u64, Vec<Hash<_>>)> = Vec::new();
+        let mut new_commitments: Vec<(u64, Hash<_>)> = Vec::new();
+        let mut new_accounts: Vec<(u64, _)> = Vec::new();
+        let mut new_notes: Vec<Vec<(u64, _)>> = Vec::new();
         for IndexedTx{index, memo, commitment} in txs {    
             let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
             let hashes: Vec<_> = (&memo[4..])
@@ -301,12 +303,6 @@ impl UserAccount {
 
             match pair {
                 Some((account, notes)) => {        
-                    if !other_tx_commitments.is_empty() {
-                        let commitments = other_tx_commitments.drain(..);
-                        self.inner.borrow_mut().state.tree.add_tx_commitments(other_tx_start_index.unwrap(), commitments);
-                        other_tx_start_index = None;
-                    }
-                    
                     let mut in_notes = Vec::new();
                     let mut out_notes = Vec::new();
                     notes.into_iter()
@@ -319,11 +315,9 @@ impl UserAccount {
                             }
                         });
 
-                    self.inner
-                        .borrow_mut()
-                        .state
-                        .add_full_tx(index, &hashes, Some(account), &in_notes);
-
+                    new_accounts.push((index, account));
+                    new_notes.push(in_notes.clone());
+                    new_leafs.push((index, hashes));
                     decrypted_memos.push(
                         DecMemo {
                             index, 
@@ -350,18 +344,9 @@ impl UserAccount {
                         })
                         .collect();
                     
-                    if !in_notes.is_empty() {
-                        if !other_tx_commitments.is_empty() {
-                            let commitments = other_tx_commitments.drain(..);
-                            self.inner.borrow_mut().state.tree.add_tx_commitments(other_tx_start_index.unwrap(), commitments);
-                            other_tx_start_index = None;
-                        }
-
-                        self.inner
-                            .borrow_mut()
-                            .state
-                            .add_full_tx(index, &hashes, None, &in_notes);
-
+                    if in_notes.len() > 0 {
+                        new_notes.push(in_notes.clone());
+                        new_leafs.push((index, hashes));
                         decrypted_memos.push(
                             DecMemo{
                                 index, 
@@ -372,19 +357,25 @@ impl UserAccount {
                             }
                         );
                     } else {
-                        other_tx_commitments.push(
-                            Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)))
+                        new_commitments.push(
+                            (index, Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment))))
                         );
-                        other_tx_start_index = other_tx_start_index.or(Some(index));
                     }
                 }
             }
         }
 
-        if !other_tx_commitments.is_empty() {
-            let commitments = other_tx_commitments.drain(..);
-            self.inner.borrow_mut().state.tree.add_tx_commitments(other_tx_start_index.unwrap(), commitments);
-        }
+        self.inner.borrow_mut().state.tree.add_leafs_and_commitments(new_leafs, new_commitments);
+
+        new_accounts.into_iter().for_each(|(at_index, account)| {
+            self.inner.borrow_mut().state.add_account(at_index, account);
+        });
+
+        new_notes.into_iter().for_each(|notes| {
+            notes.into_iter().for_each(|(at_index, note)| {
+                self.inner.borrow_mut().state.add_note(at_index, note);
+            });
+        });
 
         let decrypted_memos = serde_wasm_bindgen::to_value(&decrypted_memos)
              .unwrap()
