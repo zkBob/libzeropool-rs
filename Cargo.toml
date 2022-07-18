@@ -3,9 +3,11 @@ members = [
     "libzkbob-rs-wasm",
     "libzkbob-rs",
     "libzkbob-rs-node",
+    "libs/kvdb-web",
 ]
 
 default-members = [
     "libzkbob-rs",
     "libzkbob-rs-node",
+    "libs/kvdb-web",
 ]
