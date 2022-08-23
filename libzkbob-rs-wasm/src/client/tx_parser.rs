@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS};
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StateUpdate {
     #[serde(rename = "newLeafs")]
     pub new_leafs: Vec<(u64, Vec<Hash<Fr>>)>,

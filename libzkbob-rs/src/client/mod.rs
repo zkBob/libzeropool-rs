@@ -51,7 +51,7 @@ pub enum CreateTxError {
     InsufficientEnergy(String, String),
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct StateFragment<Fr: PrimeField> {
     pub new_leafs: Vec<(u64, Vec<Hash<Fr>>)>,
     pub new_commitments: Vec<(u64, Hash<Fr>)>,
@@ -226,7 +226,7 @@ where
         let in_account_index = in_account_optimistic_index.or(state.latest_account_index);
 
         // initial usable note index
-        let next_usable_index = state.earliest_usable_index_optimistic(extra_state.new_accounts, extra_state.new_notes);
+        let next_usable_index = state.earliest_usable_index_optimistic(&extra_state.new_accounts, &extra_state.new_notes);
 
         let latest_note_index_optimistic = extra_state.new_notes
             .last()
@@ -503,10 +503,14 @@ where
 
         let (eddsa_s, eddsa_r) = tx_sign(keys.sk, tx_hash, &self.params);
 
+        let new_leafs = extra_state.new_leafs.iter().cloned();
+        let new_commitments = extra_state.new_commitments.iter().cloned();
+        let (mut virtual_nodes, update_boundaries) = tree.get_virtual_subtree(new_leafs, new_commitments);
+
         let account_proof = in_account_index.map_or_else(
             || Ok(zero_proof()),
             |i| {
-                tree.get_proof_optimistic_index(i, extra_state.new_leafs, extra_state.new_commitments)
+                tree.get_proof_optimistic_index(i, &mut virtual_nodes, &update_boundaries)
                     .ok_or(CreateTxError::ProofNotFound(i))
             },
         )?;
@@ -514,7 +518,7 @@ where
             .iter()
             .copied()
             .map(|(index, _note)| {
-                tree.get_proof_optimistic_index(index, extra_state.new_leafs, extra_state.new_commitments)
+                tree.get_proof_optimistic_index(index, &mut virtual_nodes, &update_boundaries)
                     .ok_or(CreateTxError::ProofNotFound(index))
             })
             .chain((0..).map(|_| Ok(zero_proof())))

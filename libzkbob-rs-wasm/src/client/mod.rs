@@ -18,7 +18,7 @@ use libzeropool::{
     },
 };
 use libzkbob_rs::{
-    client::{TxType as NativeTxType, UserAccount as NativeUserAccount},
+    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
     merkle::{Hash, Node}
 };
 use serde::{Serialize};
@@ -147,10 +147,26 @@ impl UserAccount {
 
         let account = self.inner.clone();
 
+        let extra_state = new_state.map(|s| {
+            let mut joined_notes = vec![];
+            s.new_notes.into_iter().for_each(|notes| {
+                notes.into_iter().for_each(|one_note| {
+                    joined_notes.push(one_note);
+                });
+            });
+
+            StateFragment {
+                new_leafs: s.new_leafs,
+                new_commitments: s.new_commitments,
+                new_accounts: s.new_accounts,
+                new_notes: joined_notes,
+            }
+        });
+
         future_to_promise(async move {
             let tx = account
                 .borrow()
-                .create_tx(native_tx, None)
+                .create_tx(native_tx, None, extra_state)
                 .map_err(|err| js_err!("{}", err))?;
 
             let (v, e, index, _) = parse_delta(tx.public.delta);
@@ -190,8 +206,9 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = "createTransferOptimistic")]
-    pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: StateUpdate) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(transfer.to_native()?, new_state.to_native()?))
+    pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: &JsValue) -> Result<Promise, JsValue> {
+        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        Ok(self.construct_tx_data(transfer.to_native()?, Some(new_state)))
     }
 
     #[wasm_bindgen(js_name = "createWithdraw")]
@@ -200,8 +217,9 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = "createWithdrawalOptimistic")]
-    pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: StateUpdate) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(transfer.to_native()?, new_state.to_native()?))
+    pub fn create_withdraw_optimistic(&self, withdraw: IWithdrawData, new_state: &JsValue) -> Result<Promise, JsValue> {
+        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        Ok(self.construct_tx_data(withdraw.to_native()?, Some(new_state)))
     }
 
     #[wasm_bindgen(js_name = "isOwnAddress")]
