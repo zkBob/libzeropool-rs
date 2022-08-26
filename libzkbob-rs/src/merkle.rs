@@ -316,6 +316,15 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         )
     }
 
+    pub fn get_root_optimistic(
+        &self,
+        virtual_nodes: &mut HashMap<(u32, u64), Hash<P::Fr>>,
+        update_boundaries: &UpdateBoundaries,
+    ) -> Hash<P::Fr>
+    {
+        self.get_virtual_node_full(constants::HEIGHT as u32, 0, virtual_nodes, &update_boundaries)
+    }
+
     pub fn get_opt(&self, height: u32, index: u64) -> Option<Hash<P::Fr>> {
         assert!(height <= constants::HEIGHT as u32);
 
@@ -443,6 +452,70 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         };
 
         Some(self.get_proof_virtual(index, &mut virtual_nodes, &update_boundaries))
+    }
+
+
+    pub fn get_virtual_subtree<I1, I2>(
+        &self,
+        new_hashes: I1,
+        new_commitments: I2,
+    ) -> (HashMap<(u32, u64), Hash<P::Fr>>, UpdateBoundaries)
+    where
+        I1: IntoIterator<Item = (u64, Vec<Hash<P::Fr>>)>,
+        I2: IntoIterator<Item = (u64, Hash<P::Fr>)>,
+    {
+        let mut next_index: u64 = 0;
+        let mut start_index: u64 = u64::MAX;
+        let mut virtual_nodes: HashMap<(u32, u64), Hash<P::Fr>> = new_commitments
+            .into_iter()
+            .map(|(index, hash)| {
+                assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
+                start_index = start_index.min(index);
+                next_index = next_index.max(index + 1);
+                ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
+            })
+            .collect();
+        
+        new_hashes.into_iter().for_each(|(index, leafs)| {
+            assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
+            start_index = start_index.min(index);
+            next_index = next_index.max(index + leafs.len() as u64);
+            (0..constants::OUTPLUSONELOG)
+                .for_each(|height| {
+                    virtual_nodes.insert((height as u32, ((index + leafs.len() as u64 - 1) >> height) + 1), self.zero_note_hashes[height]);
+                });
+            leafs.into_iter().enumerate().for_each(|(i, leaf)| {
+                virtual_nodes.insert((0_u32, index + i as u64), leaf);
+            });
+        });
+
+        let update_boundaries = UpdateBoundaries {
+            updated_range_left_index: self.next_index,
+            updated_range_right_index: Self::calc_next_index(next_index),
+            new_hashes_left_index: start_index,
+            new_hashes_right_index: next_index,
+        };
+
+        // calculate new hashes
+        self.get_virtual_node_full(
+            constants::HEIGHT as u32,
+            0,
+            &mut virtual_nodes,
+            &update_boundaries,
+        );
+
+        (virtual_nodes, update_boundaries)
+    }
+    
+
+    pub fn get_proof_optimistic_index(
+        &self,
+        index: u64,
+        virtual_nodes: &mut HashMap<(u32, u64), Hash<P::Fr>>,
+        update_boundaries: &UpdateBoundaries,
+    ) -> Option<MerkleProof<P::Fr, { constants::HEIGHT }>>
+    {
+        Some(self.get_proof_virtual(index, virtual_nodes, update_boundaries))
     }
 
     fn get_proof_virtual<const H: usize>(
@@ -868,7 +941,7 @@ pub struct Node<F: PrimeField> {
     pub value: Num<F>,
 }
 
-struct UpdateBoundaries {
+pub struct UpdateBoundaries {
     updated_range_left_index: u64,
     updated_range_right_index: u64,
     new_hashes_left_index: u64,

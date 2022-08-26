@@ -18,7 +18,7 @@ use libzeropool::{
     },
 };
 use libzkbob_rs::{
-    client::{TxType as NativeTxType, UserAccount as NativeUserAccount},
+    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
     merkle::{Hash, Node}
 };
 use serde::{Serialize};
@@ -124,7 +124,7 @@ impl UserAccount {
         Ok(pair)
     }
 
-    fn construct_tx_data(&self, native_tx: NativeTxType<Fr>) -> Promise {
+    fn construct_tx_data(&self, native_tx: NativeTxType<Fr>, new_state: Option<StateUpdate>) -> Promise {
         #[derive(Serialize)]
         struct ParsedDelta {
             v: i64,
@@ -147,10 +147,26 @@ impl UserAccount {
 
         let account = self.inner.clone();
 
+        let extra_state = new_state.map(|s| {
+            let mut joined_notes = vec![];
+            s.new_notes.into_iter().for_each(|notes| {
+                notes.into_iter().for_each(|one_note| {
+                    joined_notes.push(one_note);
+                });
+            });
+
+            StateFragment {
+                new_leafs: s.new_leafs,
+                new_commitments: s.new_commitments,
+                new_accounts: s.new_accounts,
+                new_notes: joined_notes,
+            }
+        });
+
         future_to_promise(async move {
             let tx = account
                 .borrow()
-                .create_tx(native_tx, None)
+                .create_tx(native_tx, None, extra_state)
                 .map_err(|err| js_err!("{}", err))?;
 
             let (v, e, index, _) = parse_delta(tx.public.delta);
@@ -174,86 +190,36 @@ impl UserAccount {
         })
     }
 
-    fn construct_multi_tx_data(&self, native_txs: Vec<NativeTxType<Fr>>) -> Promise {
-        #[derive(Serialize)]
-        struct ParsedDelta {
-            v: i64,
-            e: i64,
-            index: u64,
-        }
-
-        #[derive(Serialize)]
-        struct TransactionData {
-            public: NativeTransferPub<Fr>,
-            secret: NativeTransferSec<Fr>,
-            #[serde(with = "hex")]
-            ciphertext: Vec<u8>,
-            #[serde(with = "hex")]
-            memo: Vec<u8>,
-            commitment_root: Num<Fr>,
-            out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }>,
-            parsed_delta: ParsedDelta,
-        }
-
-        let account = self.inner.clone();
-
-        future_to_promise(async move {
-            let txs = account
-                .borrow()
-                .create_txs(native_txs, None)
-                .map_err(|err| js_err!("{}", err))?;
-
-            let ready_txs: Vec<TransactionData> = txs.into_iter().map(|tx| {
-                let (v, e, index, _) = parse_delta(tx.public.delta);
-                let parsed_delta = ParsedDelta {
-                    v: v.try_into().unwrap(),
-                    e: e.try_into().unwrap(),
-                    index: index.try_into().unwrap(),
-                };
-
-                TransactionData {
-                    public: tx.public,
-                    secret: tx.secret,
-                    ciphertext: tx.ciphertext,
-                    memo: tx.memo,
-                    out_hashes: tx.out_hashes,
-                    commitment_root: tx.commitment_root,
-                    parsed_delta,
-                }
-            }).collect();
-
-            Ok(serde_wasm_bindgen::to_value(&ready_txs).unwrap())
-        })
-    }
-
     #[wasm_bindgen(js_name = "createDeposit")]
     pub fn create_deposit(&self, deposit: IDepositData) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(deposit.to_native()?))
+        Ok(self.construct_tx_data(deposit.to_native()?, None))
     }
 
     #[wasm_bindgen(js_name = "createDepositPermittable")]
     pub fn create_deposit_permittable(&self, deposit: IDepositPermittableData) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(deposit.to_native()?))
+        Ok(self.construct_tx_data(deposit.to_native()?, None))
     }
 
     #[wasm_bindgen(js_name = "createTransfer")]
     pub fn create_tranfer(&self, transfer: ITransferData) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(transfer.to_native()?))
+        Ok(self.construct_tx_data(transfer.to_native()?, None))
     }
 
-    #[wasm_bindgen(js_name = "createMultiTransfer")]
-    pub fn create_multi_tranfer(&self, transfers: IMultiTransferData) -> Result<Promise, JsValue> {
-        Ok(self.construct_multi_tx_data(transfers.to_native_array()?))
+    #[wasm_bindgen(js_name = "createTransferOptimistic")]
+    pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: &JsValue) -> Result<Promise, JsValue> {
+        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        Ok(self.construct_tx_data(transfer.to_native()?, Some(new_state)))
     }
 
     #[wasm_bindgen(js_name = "createWithdraw")]
     pub fn create_withdraw(&self, withdraw: IWithdrawData) -> Result<Promise, JsValue> {
-        Ok(self.construct_tx_data(withdraw.to_native()?))
+        Ok(self.construct_tx_data(withdraw.to_native()?, None))
     }
 
-    #[wasm_bindgen(js_name = "createMultiWithdraw")]
-    pub fn create_multi_withdraw(&self, withdrawals: IMultiWithdrawData) -> Result<Promise, JsValue> {
-        Ok(self.construct_multi_tx_data(withdrawals.to_native_array()?))
+    #[wasm_bindgen(js_name = "createWithdrawalOptimistic")]
+    pub fn create_withdraw_optimistic(&self, withdraw: IWithdrawData, new_state: &JsValue) -> Result<Promise, JsValue> {
+        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        Ok(self.construct_tx_data(withdraw.to_native()?, Some(new_state)))
     }
 
     #[wasm_bindgen(js_name = "isOwnAddress")]
