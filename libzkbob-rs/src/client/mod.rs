@@ -320,7 +320,7 @@ where
 
         let (num_real_out_notes, out_notes): (_, SizedVec<_, { constants::OUT }>) =
             if let TxType::Transfer(_, _, outputs) = &tx {
-                if outputs.len() >= constants::OUT {
+                if outputs.len() > constants::OUT {
                     return Err(CreateTxError::TooManyOutputs {
                         max: constants::OUT,
                         got: outputs.len(),
