@@ -150,42 +150,44 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             return;
         }
 
-        let mut next_index: u64 = 0;
-        let mut start_index: u64 = u64::MAX;
+        let mut last_bound_index: u64 = 0;
+        let mut first_bound_index: u64 = u64::MAX;
         let mut virtual_nodes: HashMap<(u32, u64), Hash<P::Fr>> = commitments
             .into_iter()
             .map(|(index, hash)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-                start_index = start_index.min(index);
-                next_index = next_index.max(index + 1);
+                first_bound_index = first_bound_index.min(index);
+                last_bound_index = last_bound_index.max(index + 1);
                 ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
             })
             .collect();
         
-        leafs.into_iter().for_each(|(index, leafs)| {
-            assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-            start_index = start_index.min(index);
-            next_index = next_index.max(index + leafs.len() as u64);
-            (0..constants::OUTPLUSONELOG)//(0..constants::OUTPLUSONELOG)
-                .for_each(|height| {
-                    let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
-                    if level_index < (index + (constants::OUT as u64 + 1) >> height) {
-                        virtual_nodes.insert((height as u32, level_index), self.zero_note_hashes[height]);
-                    }
+        leafs.into_iter()
+            .filter(|(_, leafs)| leafs.len() > 0)
+            .for_each(|(index, leafs)| {
+                assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
+                first_bound_index = first_bound_index.min(index);
+                last_bound_index = last_bound_index.max(index + leafs.len() as u64 - 1);
+                (0..constants::OUTPLUSONELOG)
+                    .for_each(|height| {
+                        let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
+                        if level_index < (index + (constants::OUT as u64 + 1) >> height) && level_index % 2 == 1 {
+                            virtual_nodes.insert((height as u32, level_index), self.zero_note_hashes[height]);
+                        }
+                    });
+                leafs.into_iter().enumerate().for_each(|(i, leaf)| {
+                    virtual_nodes.insert((0_u32, index + i as u64), leaf);
                 });
-            leafs.into_iter().enumerate().for_each(|(i, leaf)| {
-                virtual_nodes.insert((0_u32, index + i as u64), leaf);
             });
-        });
 
         let original_next_index = self.next_index;
-        self.update_next_index_from_node(0, next_index);
+        self.update_next_index_from_node(0, last_bound_index);
 
         let update_boundaries = UpdateBoundaries {
             updated_range_left_index: original_next_index,
             updated_range_right_index: self.next_index,
-            new_hashes_left_index: start_index,
-            new_hashes_right_index: next_index,
+            new_hashes_left_index: first_bound_index,
+            new_hashes_right_index: last_bound_index + 1,
         };
 
         // calculate new hashes
@@ -490,7 +492,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             (0..constants::OUTPLUSONELOG)
                 .for_each(|height| {
                     let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
-                    if level_index < (index + (constants::OUT as u64 + 1) >> height) {
+                    if level_index < (index + (constants::OUT as u64 + 1) >> height) && level_index % 2 == 1 {
                         virtual_nodes.insert((height as u32, level_index), self.zero_note_hashes[height]);
                     }
                 });
@@ -1483,7 +1485,7 @@ mod tests {
     #[test_case(15, 7, 0.5)]
     #[test_case(15, 7, 1.0)]
     #[test_case(15, 100, 0.0)]
-    #[test_case(100, 128, 0.0)]
+    #[test_case(15, 128, 0.0)]
     fn test_add_leafs_and_commitments(tx_count: u64, max_leafs_count: u32, commitments_probability: f64) {
         let mut rng = CustomRng;
         let mut first_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
@@ -1536,6 +1538,7 @@ mod tests {
     #[test_case(2, 64)]
     #[test_case(2, 65)]
     #[test_case(2, 100)]
+    #[test_case(2, 127)]
     #[test_case(2, 128)] 
     fn test_add_leafs_and_commitments_multinotes(tx_count: u64, leafs_count: u32) {
         let mut rng = CustomRng;
@@ -1590,6 +1593,7 @@ mod tests {
     #[test_case(15, 7, 0.0)]
     #[test_case(15, 7, 0.5)]
     #[test_case(15, 7, 1.0)]
+    #[test_case(15, 128, 0.0)]
     fn test_get_root_optimistic(tx_count: u64, max_leafs_count: u32, commitments_probability: f64) {
         let mut rng = CustomRng;
         let mut tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
