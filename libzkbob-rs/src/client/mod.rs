@@ -239,7 +239,7 @@ where
             let next_by_optimistic_leaf = extra_state.new_leafs
                 .last()
                 .map(|leafs| {
-                    (((leafs.0 + (leafs.1.len() as u64)) >> constants::OUTPLUSONELOG) + 1) << constants::OUTPLUSONELOG
+                    (((leafs.0 + (leafs.1.len() as u64) - 1) >> constants::OUTPLUSONELOG) + 1) << constants::OUTPLUSONELOG
                 });
             let next_by_optimistic_commitment = extra_state.new_commitments
                 .last()

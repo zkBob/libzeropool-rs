@@ -157,7 +157,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             .map(|(index, hash)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
                 first_bound_index = first_bound_index.min(index);
-                last_bound_index = last_bound_index.max(index + 1);
+                last_bound_index = last_bound_index.max(index);
                 ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
             })
             .collect();
@@ -473,22 +473,22 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         I1: IntoIterator<Item = (u64, Vec<Hash<P::Fr>>)>,
         I2: IntoIterator<Item = (u64, Hash<P::Fr>)>,
     {
-        let mut next_index: Option<u64> = None;
-        let mut start_index: Option<u64> = None;
+        let mut last_bound_index: Option<u64> = None;
+        let mut first_bound_index: Option<u64> = None;
         let mut virtual_nodes: HashMap<(u32, u64), Hash<P::Fr>> = new_commitments
             .into_iter()
             .map(|(index, hash)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-                start_index = Some(start_index.unwrap_or(u64::MAX).min(index));
-                next_index = Some(next_index.unwrap_or(0).max(index + 1));
+                first_bound_index = Some(first_bound_index.unwrap_or(u64::MAX).min(index));
+                last_bound_index = Some(last_bound_index.unwrap_or(0).max(index));
                 ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
             })
             .collect();
         
         new_hashes.into_iter().for_each(|(index, leafs)| {
             assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-            start_index = Some(start_index.unwrap_or(u64::MAX).min(index));
-            next_index = Some(next_index.unwrap_or(0).max(index + leafs.len() as u64));
+            first_bound_index = Some(first_bound_index.unwrap_or(u64::MAX).min(index));
+            last_bound_index = Some(last_bound_index.unwrap_or(0).max(index + leafs.len() as u64 - 1));
             (0..constants::OUTPLUSONELOG)
                 .for_each(|height| {
                     let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
@@ -502,12 +502,12 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         });
 
         let update_boundaries = {
-            if let (Some(start_index), Some(next_index)) = (start_index, next_index) {
+            if let (Some(first_bound_index), Some(last_bound_index)) = (first_bound_index, last_bound_index) {
                 UpdateBoundaries {
                     updated_range_left_index: self.next_index,
-                    updated_range_right_index: Self::calc_next_index(next_index),
-                    new_hashes_left_index: start_index,
-                    new_hashes_right_index: next_index,
+                    updated_range_right_index: Self::calc_next_index(last_bound_index),
+                    new_hashes_left_index: first_bound_index,
+                    new_hashes_right_index: last_bound_index + 1,
                 }
             } else {
                 UpdateBoundaries {
