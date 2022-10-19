@@ -1,5 +1,5 @@
 use crate::{Fr, IDepositData, IDepositPermittableData, ITransferData, IWithdrawData, IMultiTransferData, IMultiWithdrawData};
-use libzkbob_rs::client::{TokenAmount, TxOutput, TxType as NativeTxType};
+use libzkbob_rs::client::{TokenAmount, TurnoverLimit, TokenLimit, TxOutput, TxType as NativeTxType, Limits as TxLimits};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -27,12 +27,30 @@ pub struct TxBaseFields {
     data: Option<Vec<u8>>,
 }
 
+#[derive(Deserialize)]
+pub struct Limits {
+    pub daily_limit: TurnoverLimit<Fr>,
+    pub transfer_limit: TokenLimit<Fr>,
+    pub out_note_min: TokenLimit<Fr>,
+}
+
+impl Limits {
+    fn to_native(&self) -> TxLimits<Fr> {
+        TxLimits {
+            daily_limit: self.daily_limit,
+            transfer_limit: self.transfer_limit,
+            out_note_min: self.out_note_min,
+        }
+    }
+}
+
 #[wasm_bindgen]
 #[derive(Deserialize)]
 pub struct DepositData {
     #[serde(flatten)]
     base_fields: TxBaseFields,
     amount: TokenAmount<Fr>,
+    limits: Limits,
 }
 
 impl JsTxType for IDepositData {
@@ -40,12 +58,14 @@ impl JsTxType for IDepositData {
         let DepositData {
             base_fields,
             amount,
+            limits,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
         Ok(NativeTxType::Deposit(
             base_fields.fee,
             base_fields.data.unwrap_or_default(),
             amount,
+            limits.to_native(),
         ))
     }
 }
@@ -58,6 +78,7 @@ pub struct DepositPermittableData {
     amount: TokenAmount<Fr>,
     deadline: String,
     holder: Vec<u8>,
+    limits: Limits,
 }
 
 impl JsTxType for IDepositPermittableData {
@@ -67,6 +88,7 @@ impl JsTxType for IDepositPermittableData {
             amount,
             deadline,
             holder,
+            limits,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
         Ok(NativeTxType::DepositPermittable(
@@ -74,7 +96,8 @@ impl JsTxType for IDepositPermittableData {
             base_fields.data.unwrap_or_default(),
             amount,
             deadline.parse::<u64>().unwrap_or(0),
-            holder
+            holder,
+            limits.to_native(),
         ))
     }
 }
@@ -91,6 +114,7 @@ pub struct TransferData {
     #[serde(flatten)]
     base_fields: TxBaseFields,
     outputs: Vec<Output>,
+    limits: Limits,
 }
 
 impl JsTxType for ITransferData {
@@ -98,6 +122,7 @@ impl JsTxType for ITransferData {
         let TransferData {
             base_fields,
             outputs,
+            limits,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
         let outputs = outputs
@@ -112,6 +137,7 @@ impl JsTxType for ITransferData {
             base_fields.fee,
             base_fields.data.unwrap_or_default(),
             outputs,
+            limits.to_native(),
         ))
     }
 }
@@ -133,6 +159,7 @@ impl JsMultiTxType for IMultiTransferData {
                 tx.base_fields.fee,
                 tx.base_fields.data.unwrap_or_default(),
                 outputs,
+                tx.limits.to_native(),
             )
         }).collect();
 
@@ -149,6 +176,7 @@ pub struct WithdrawData {
     to: Vec<u8>,
     native_amount: TokenAmount<Fr>,
     energy_amount: TokenAmount<Fr>,
+    limits: Limits,
 }
 
 impl JsTxType for IWithdrawData {
@@ -159,6 +187,7 @@ impl JsTxType for IWithdrawData {
             to,
             native_amount,
             energy_amount,
+            limits,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
         Ok(NativeTxType::Withdraw(
@@ -168,6 +197,7 @@ impl JsTxType for IWithdrawData {
             to,
             native_amount,
             energy_amount,
+            limits.to_native(),
         ))
     }
 }
@@ -184,6 +214,7 @@ impl JsMultiTxType for IMultiWithdrawData {
                 tx.to,
                 tx.native_amount,
                 tx.energy_amount,
+                tx.limits.to_native(),
             )
         }).collect();
 

@@ -77,19 +77,30 @@ pub struct TxOutput<Fr: PrimeField> {
     pub amount: TokenAmount<Fr>,
 }
 
+pub type TurnoverLimit<Fr> = BoundedNum<Fr, { constants::TURNOVER_SIZE_BITS }>;
+pub type TokenLimit<Fr> = BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }>;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Limits<Fr: PrimeField> {
+    pub daily_limit: TurnoverLimit<Fr>,
+    pub transfer_limit: TokenLimit<Fr>,
+    pub out_note_min: TokenLimit<Fr>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TxType<Fr: PrimeField> {
     // fee, data, tx_outputs
-    Transfer(TokenAmount<Fr>, Vec<u8>, Vec<TxOutput<Fr>>),
+    Transfer(TokenAmount<Fr>, Vec<u8>, Vec<TxOutput<Fr>>, Limits<Fr>),
     // fee, data, deposit_amount
-    Deposit(TokenAmount<Fr>, Vec<u8>, TokenAmount<Fr>),
+    Deposit(TokenAmount<Fr>, Vec<u8>, TokenAmount<Fr>, Limits<Fr>),
     // fee, data, deposit_amount, deadline, holder
     DepositPermittable(
         TokenAmount<Fr>,
         Vec<u8>,
         TokenAmount<Fr>,
         u64,
-        Vec<u8>
+        Vec<u8>,
+        Limits<Fr>,
     ),
     // fee, data, withdraw_amount, to, native_amount, energy_amount
     Withdraw(
@@ -99,6 +110,7 @@ pub enum TxType<Fr: PrimeField> {
         Vec<u8>,
         TokenAmount<Fr>,
         TokenAmount<Fr>,
+        Limits<Fr>,
     ),
 }
 
@@ -180,6 +192,7 @@ where
     pub fn create_tx(
         &self,
         tx: TxType<P::Fr>,
+        timestamp_sec: u64,
         delta_index: Option<u64>,
         extra_state: Option<StateFragment<P::Fr>>
     ) -> Result<TransactionData<P::Fr>, CreateTxError> {
@@ -217,6 +230,8 @@ where
                     i: BoundedNum::new(Num::ZERO),
                     b: BoundedNum::new(Num::ZERO),
                     e: BoundedNum::new(Num::ZERO),
+                    last_action_day: BoundedNum::new(Num::ZERO),
+                    daily_turnover: BoundedNum::new(Num::ZERO),
                 }
             })
         });
@@ -253,29 +268,29 @@ where
                 .unwrap_or(self.state.tree.next_index())
         }));
 
-        let (fee, tx_data, user_data) = {
+        let (fee, tx_data, user_data, limits) = {
             let mut tx_data: Vec<u8> = vec![];
             match &tx {
-                TxType::Deposit(fee, user_data, _) => {
+                TxType::Deposit(fee, user_data, _, limits) => {
                     let raw_fee: u64 = fee.to_num().try_into().unwrap();
                     tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
-                    (fee, tx_data, user_data)
+                    (fee, tx_data, user_data, limits)
                 }
-                TxType::DepositPermittable(fee, user_data, _, deadline, holder) => {
+                TxType::DepositPermittable(fee, user_data, _, deadline, holder, limits) => {
                     let raw_fee: u64 = fee.to_num().try_into().unwrap();
 
                     tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
                     tx_data.write_all(&deadline.to_be_bytes()).unwrap();
                     tx_data.append(&mut holder.clone());
                     
-                    (fee, tx_data, user_data)
+                    (fee, tx_data, user_data, limits)
                 }
-                TxType::Transfer(fee, user_data, _) => {
+                TxType::Transfer(fee, user_data, _, limits) => {
                     let raw_fee: u64 = fee.to_num().try_into().unwrap();
                     tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
-                    (fee, tx_data, user_data)
+                    (fee, tx_data, user_data, limits)
                 }
-                TxType::Withdraw(fee, user_data, _, reciever, native_amount, _) => {
+                TxType::Withdraw(fee, user_data, _, reciever, native_amount, _, limits) => {
                     let raw_fee: u64 = fee.to_num().try_into().unwrap();
                     let raw_native_amount: u64 = native_amount.to_num().try_into().unwrap();
 
@@ -283,7 +298,7 @@ where
                     tx_data.write_all(&raw_native_amount.to_be_bytes()).unwrap();
                     tx_data.append(&mut reciever.clone());
 
-                    (fee, tx_data, user_data)
+                    (fee, tx_data, user_data, limits)
                 }
             }
         };
@@ -319,7 +334,7 @@ where
         let mut output_value = Num::ZERO;
 
         let (num_real_out_notes, out_notes): (_, SizedVec<_, { constants::OUT }>) =
-            if let TxType::Transfer(_, _, outputs) = &tx {
+            if let TxType::Transfer(_, _, outputs, _) = &tx {
                 if outputs.len() >= constants::OUT {
                     return Err(CreateTxError::TooManyOutputs {
                         max: constants::OUT,
@@ -364,7 +379,7 @@ where
             input_energy += note.b.to_num() * (delta_index - Num::from(*note_index));
         }
         let new_balance = match &tx {
-            TxType::Transfer(_, _, _) => {
+            TxType::Transfer(_, _, _, _) => {
                 if input_value.to_uint() >= (output_value + fee.as_num()).to_uint() {
                     input_value - output_value - fee.as_num()
                 } else {
@@ -374,7 +389,7 @@ where
                     ));
                 }
             }
-            TxType::Withdraw(_, _, amount, _, _, energy) => {
+            TxType::Withdraw(_, _, amount, _, _, energy, _) => {
                 let amount = amount.to_num();
                 let energy = energy.to_num();
 
@@ -397,10 +412,34 @@ where
                     ));
                 }
             }
-            TxType::Deposit(_, _, amount) | TxType::DepositPermittable(_, _, amount, _, _) => {
+            TxType::Deposit(_, _, amount, _) | TxType::DepositPermittable(_, _, amount, _, _, _) => {
                 delta_value += amount.to_num();
                 input_value + delta_value
             }
+        };
+
+        let day = timestamp_sec / (60 * 60 * 24); // SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() / (60 * 60 * 24);
+        let day = BoundedNum::new(Num::from(day));
+
+        let tx_amount: Num<P::Fr> = {
+            let mut out_notes_sum = Num::ZERO;
+            for note in out_notes.iter() {
+                out_notes_sum += note.b.as_num();
+            }
+            
+            let delta_value_abs = if delta_value.to_uint() >= NumRepr::ZERO {
+                delta_value
+            } else {
+                -delta_value
+            };
+
+            out_notes_sum + delta_value_abs
+        };
+
+        let daily_turnover = if day == in_account.last_action_day {
+            in_account.daily_turnover.as_num() + tx_amount
+        } else {
+            tx_amount
         };
 
         let (d, p_d) = self.generate_address_components();
@@ -410,6 +449,8 @@ where
             i: BoundedNum::new(Num::from(spend_interval_index)),
             b: BoundedNum::new(new_balance),
             e: BoundedNum::new(delta_energy + input_energy),
+            last_action_day: day,
+            daily_turnover: BoundedNum::new(daily_turnover),
         };
 
         let in_account_hash = in_account.hash(&self.params);
@@ -502,6 +543,10 @@ where
             out_commit,
             delta,
             memo,
+            day,
+            daily_limit: limits.daily_limit,
+            transfer_limit: limits.transfer_limit,
+            out_note_min: limits.out_note_min,
         };
 
         let tx = Tx {
@@ -558,13 +603,16 @@ mod tests {
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let timestamp_sec = 19283;
 
         acc.create_tx(
             TxType::Deposit(
                 BoundedNum::new(Num::ZERO),
                 vec![],
                 BoundedNum::new(Num::ZERO),
+                test_limits(),
             ),
+            timestamp_sec,
             None,
             None,
         )
@@ -575,13 +623,16 @@ mod tests {
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let timestamp_sec = 19283;
 
         acc.create_tx(
             TxType::Deposit(
                 BoundedNum::new(Num::ZERO),
                 vec![],
                 BoundedNum::new(Num::ONE),
+                test_limits(),
             ),
+            timestamp_sec,
             None,
             None,
         )
@@ -593,6 +644,7 @@ mod tests {
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let timestamp_sec = 19283;
 
         let addr = acc.generate_address();
 
@@ -602,7 +654,8 @@ mod tests {
         };
 
         acc.create_tx(
-            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out]),
+            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out], test_limits()),
+            timestamp_sec,
             None,
             None,
         )
@@ -614,6 +667,7 @@ mod tests {
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let timestamp_sec = 19283;
 
         let addr = acc.generate_address();
 
@@ -623,7 +677,8 @@ mod tests {
         };
 
         acc.create_tx(
-            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out]),
+            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out], test_limits()),
+            timestamp_sec,
             None,
             None,
         )
@@ -651,5 +706,13 @@ mod tests {
 
         assert!(!acc_1.is_own_address(&address_2));
         assert!(!acc_2.is_own_address(&address_1));
+    }
+
+    fn test_limits<Fr: PrimeField>() -> Limits<Fr> {
+        Limits {
+            daily_limit: BoundedNum::new(Num::from(1000)),
+            transfer_limit: BoundedNum::new(Num::from(1000)),
+            out_note_min: BoundedNum::new(Num::from(0)),
+        }
     }
 }

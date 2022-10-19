@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 
-use js_sys::{Array, Promise};
+use js_sys::{Array, Promise, Date};
 use libzeropool::{
     constants,
     fawkes_crypto::{
@@ -163,10 +163,11 @@ impl UserAccount {
             }
         });
 
+        let timestamp_sec = Date::now().ceil() as u64 / 1000;
         future_to_promise(async move {
             let tx = account
                 .borrow()
-                .create_tx(native_tx, None, extra_state)
+                .create_tx(native_tx, timestamp_sec, None, extra_state)
                 .map_err(|err| js_err!("{}", err))?;
 
             let (v, e, index, _) = parse_delta(tx.public.delta);

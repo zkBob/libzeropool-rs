@@ -26,6 +26,8 @@ export interface Account {
     b: string;
     e: string;
     t: string;
+    last_action_day: string;
+    daily_turnover: string;
 }
 
 export interface TransferPub {
@@ -34,6 +36,10 @@ export interface TransferPub {
     out_commit: string;
     delta: string;
     memo: string;
+    day: string;
+    daily_limit: string;
+    transfer_limit: string;
+    out_note_min: string;
 }
 
 export interface TransferSec {
@@ -104,18 +110,27 @@ export interface ITxBaseFields {
     data?: Uint8Array;
 }
 
+export interface ILimits {
+    daily_limit: string;
+    transfer_limit: string;
+    out_note_min: string;
+}
+
 export interface IDepositData extends ITxBaseFields {
     amount: string;
+    limits: ILimits;
 }
 
 export interface IDepositPermittableData extends ITxBaseFields {
     amount: string;
     deadline: string;
     holder: Uint8Array;
+    limits: ILimits;
 }
 
 export interface ITransferData extends ITxBaseFields {
     outputs: Output[];
+    limits: ILimits;
 }
 
 export interface IWithdrawData extends ITxBaseFields {
@@ -123,6 +138,7 @@ export interface IWithdrawData extends ITxBaseFields {
     to: Uint8Array;
     native_amount: string;
     energy_amount: string;
+    limits: ILimits;
 }
 
 export interface DecryptedMemo {
