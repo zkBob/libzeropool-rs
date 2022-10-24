@@ -421,25 +421,25 @@ where
         let day = timestamp_sec / (60 * 60 * 24); // SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() / (60 * 60 * 24);
         let day = BoundedNum::new(Num::from(day));
 
-        let tx_amount: Num<P::Fr> = {
+        let tx_turnover: Num<P::Fr> = {
             let mut out_notes_sum = Num::ZERO;
             for note in out_notes.iter() {
                 out_notes_sum += note.b.as_num();
             }
             
-            let delta_value_abs = if delta_value.to_uint() >= NumRepr::ZERO {
-                delta_value
-            } else {
-                -delta_value
+            let delta_value_abs = match &tx {
+                TxType::Deposit(_, _, _, _) => delta_value,
+                TxType::DepositPermittable(_, _, _, _, _, _) => delta_value,
+                _ => -delta_value
             };
 
             out_notes_sum + delta_value_abs
         };
 
         let daily_turnover = if day == in_account.last_action_day {
-            in_account.daily_turnover.as_num() + tx_amount
+            in_account.daily_turnover.as_num() + tx_turnover
         } else {
-            tx_amount
+            tx_turnover
         };
 
         let (d, p_d) = self.generate_address_components();
