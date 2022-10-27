@@ -163,7 +163,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             .collect();
         
         leafs.into_iter()
-            .filter(|(_, leafs)| leafs.len() > 0)
+            .filter(|(_, leafs)| !leafs.is_empty())
             .for_each(|(index, leafs)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
                 first_bound_index = first_bound_index.min(index);
@@ -171,7 +171,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                 (0..constants::OUTPLUSONELOG)
                     .for_each(|height| {
                         let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
-                        if level_index < (index + (constants::OUT as u64 + 1) >> height) && level_index % 2 == 1 {
+                        if level_index < ((index + (constants::OUT as u64 + 1)) >> height) && level_index % 2 == 1 {
                             virtual_nodes.insert((height as u32, level_index), self.zero_note_hashes[height]);
                         }
                     });
@@ -331,7 +331,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         update_boundaries: &UpdateBoundaries,
     ) -> Hash<P::Fr>
     {
-        self.get_virtual_node_full(constants::HEIGHT as u32, 0, virtual_nodes, &update_boundaries)
+        self.get_virtual_node_full(constants::HEIGHT as u32, 0, virtual_nodes, update_boundaries)
     }
 
     pub fn get_opt(&self, height: u32, index: u64) -> Option<Hash<P::Fr>> {
@@ -492,7 +492,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             (0..constants::OUTPLUSONELOG)
                 .for_each(|height| {
                     let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
-                    if level_index < (index + (constants::OUT as u64 + 1) >> height) && level_index % 2 == 1 {
+                    if level_index < ((index + (constants::OUT as u64 + 1)) >> height) && level_index % 2 == 1 {
                         virtual_nodes.insert((height as u32, level_index), self.zero_note_hashes[height]);
                     }
                 });
@@ -1567,7 +1567,7 @@ mod tests {
         });
         
         let mut sub_leafs: Vec<(u64, Vec<_>)> = Vec::new();
-        let mut sub_commitments: Vec<(u64, _)> = Vec::new();
+        let sub_commitments: Vec<(u64, _)> = Vec::new();
         (0..leafs.len()).for_each(|i| {
             /*if rng.gen_bool(commitments_probability) {
                 sub_commitments.push(commitments[i as usize]);

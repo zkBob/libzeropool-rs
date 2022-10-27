@@ -250,7 +250,7 @@ where
                 .into_iter()
                 .chain(next_by_optimistic_commitment)
                 .max()
-                .unwrap_or(self.state.tree.next_index())
+                .unwrap_or_else(|| self.state.tree.next_index())
         }));
 
         let (fee, tx_data, user_data) = {

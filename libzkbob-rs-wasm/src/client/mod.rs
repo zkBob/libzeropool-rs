@@ -30,13 +30,13 @@ use crate::client::tx_parser::StateUpdate;
 use crate::database::Database;
 use crate::ts_types::Hash as JsHash;
 use crate::{
-    keys::reduce_sk, Account, Fr, Fs, Hashes, IDepositData, IDepositPermittableData,
-    ITransferData, IWithdrawData, IMultiTransferData, IMultiWithdrawData,
+    keys::reduce_sk, Account, Fr, Fs, Hashes, 
+    IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, MerkleProof, Pair, PoolParams, Transaction, UserState, POOL_PARAMS,
 };
 
 mod tx_types;
-use tx_types::{JsTxType, JsMultiTxType};
+use tx_types::JsTxType;
 
 mod tx_parser;
 
