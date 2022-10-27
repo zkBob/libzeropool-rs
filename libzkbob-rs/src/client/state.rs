@@ -17,7 +17,7 @@ use crate::{merkle::MerkleTree, sparse_array::SparseArray};
 
 pub type TxStorage<D, Fr> = SparseArray<D, Transaction<Fr>>;
 
-#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Eq, Debug)]
 pub enum Transaction<Fr: PrimeField> {
     Account(NativeAccount<Fr>),
     Note(NativeNote<Fr>),
@@ -197,8 +197,8 @@ where
     /// Return an index of a earliest usable note including optimistic state
     pub fn earliest_usable_index_optimistic(
         &self,
-        optimistic_accounts: &Vec<(u64, Account<P::Fr>)>,
-        optimistic_notes: &Vec<(u64, Note<P::Fr>)>
+        optimistic_accounts: &[(u64, Account<P::Fr>)],
+        optimistic_notes: &[(u64, Note<P::Fr>)]
     ) -> u64 {
         let latest_account_index = optimistic_accounts
             .last()

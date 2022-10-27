@@ -239,7 +239,7 @@ where
             let next_by_optimistic_leaf = extra_state.new_leafs
                 .last()
                 .map(|leafs| {
-                    (((leafs.0 + (leafs.1.len() as u64)) >> constants::OUTPLUSONELOG) + 1) << constants::OUTPLUSONELOG
+                    (((leafs.0 + (leafs.1.len() as u64) - 1) >> constants::OUTPLUSONELOG) + 1) << constants::OUTPLUSONELOG
                 });
             let next_by_optimistic_commitment = extra_state.new_commitments
                 .last()
@@ -250,7 +250,7 @@ where
                 .into_iter()
                 .chain(next_by_optimistic_commitment)
                 .max()
-                .unwrap_or(self.state.tree.next_index())
+                .unwrap_or_else(|| self.state.tree.next_index())
         }));
 
         let (fee, tx_data, user_data) = {
@@ -320,7 +320,7 @@ where
 
         let (num_real_out_notes, out_notes): (_, SizedVec<_, { constants::OUT }>) =
             if let TxType::Transfer(_, _, outputs) = &tx {
-                if outputs.len() >= constants::OUT {
+                if outputs.len() > constants::OUT {
                     return Err(CreateTxError::TooManyOutputs {
                         max: constants::OUT,
                         got: outputs.len(),
