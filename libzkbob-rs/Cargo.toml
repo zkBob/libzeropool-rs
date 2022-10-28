@@ -12,7 +12,7 @@ libzeropool = { git = "https://github.com/zkBob/libzeropool", branch = "multicor
 getrandom = { version = "0.2.3" }
 bs58 = "0.4.0"
 kvdb = "0.9.0"
-kvdb-web = { version = "0.9.0", optional = true }
+kvdb-web = { path = "../libs/kvdb-web", version = "0.11.0", optional = true }
 borsh = "0.9.1"
 base64 = "0.13.0"
 byteorder = "1.4.3"
