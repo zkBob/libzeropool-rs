@@ -37,7 +37,7 @@ libzeropool = { git = "https://github.com/zkBob/libzeropool", branch = "multicor
 getrandom = { version = "0.2.3", features = ["js"] }
 fawkes-crypto = { git = "https://github.com/zkBob/fawkes-crypto", branch = "multicore-wasm", version = "4.2.4", features = ["wasm", "multicore", "serde_support"] }
 bs58 = "0.4.0"
-kvdb-web = { path = "../libs/kvdb-web", version = "0.11.0" }
+kvdb-web = "0.9.0"
 kvdb = "0.9.0"
 kvdb-memorydb = "0.9.0"
 byteorder = "1.4.3"
