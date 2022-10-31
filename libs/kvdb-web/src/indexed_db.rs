@@ -21,6 +21,7 @@ use log::{debug, warn};
 use std::ops::Deref;
 
 use crate::error::Error;
+use crate::global;
 
 pub struct IndexedDB {
 	pub version: u32,
@@ -33,11 +34,11 @@ pub struct IndexedDB {
 pub fn open(name: &str, version: Option<u32>, columns: u32) -> impl Future<Output = Result<IndexedDB, Error>> {
 	let (tx, rx) = channel::oneshot::channel::<IndexedDB>();
 
-	let window = match web_sys::window() {
-		Some(window) => window,
-		None => return future::Either::Right(future::err(Error::WindowNotAvailable)),
+	let global =  match global::self_() {
+		Ok(global) => global,
+		Err(_) => return future::Either::Right(future::err(Error::GlobalScopeNotAvailable))
 	};
-	let idb_factory = window.indexed_db();
+    let idb_factory = global.indexed_db();
 
 	let idb_factory = match idb_factory {
 		Ok(idb_factory) => idb_factory.expect("We can't get a null pointer back; qed"),

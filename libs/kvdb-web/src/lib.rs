@@ -15,6 +15,7 @@
 
 mod error;
 mod indexed_db;
+mod global;
 
 use kvdb::{DBTransaction, DBValue};
 use kvdb_memorydb::{self as in_memory, InMemory};

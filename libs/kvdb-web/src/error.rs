@@ -13,9 +13,8 @@ use std::fmt;
 /// An error that occurred when working with IndexedDB.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Error {
-	/// Accessing a Window has failed.
-	/// Are we in a WebWorker?
-	WindowNotAvailable,
+	/// Accessing a Window or Worker Global Scope has failed.	
+	GlobalScopeNotAvailable,
 	/// IndexedDB is not supported by your browser.
 	NotSupported(String),
 	/// This enum may grow additional variants,
@@ -28,7 +27,7 @@ pub enum Error {
 impl std::error::Error for Error {
 	fn description(&self) -> &str {
 		match *self {
-			Error::WindowNotAvailable => "Accessing a Window has failed",
+			Error::GlobalScopeNotAvailable => "Accessing a Window or Worker Global Scope has failed",
 			Error::NotSupported(_) => "IndexedDB is not supported by your browser",
 			Error::__Nonexhaustive => unreachable!(),
 		}
@@ -38,7 +37,7 @@ impl std::error::Error for Error {
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
-			Error::WindowNotAvailable => write!(f, "Accessing a Window has failed"),
+			Error::GlobalScopeNotAvailable => write!(f, "Accessing a Window or Worker Global Scope has failed"),
 			Error::NotSupported(ref err) => write!(f, "IndexedDB is not supported by your browser: {}", err,),
 			Error::__Nonexhaustive => unreachable!(),
 		}
