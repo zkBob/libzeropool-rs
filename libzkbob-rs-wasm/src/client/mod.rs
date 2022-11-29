@@ -365,7 +365,8 @@ impl UserAccount {
             }
         });
 
-        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #1".into());
+        let js: JsValue = single_result.decrypted_memos.len().into();
+        console::log_2(&"[ColdStorage] decrypted memos counter: ".into(), &js);
 
         let state_update = single_result.state_update;
 
@@ -381,11 +382,7 @@ impl UserAccount {
             })
             .collect();
 
-        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #2".into());
-
         self.update_state_internal(state_update);
-
-        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #3".into());
 
         Ok(memos)
     }
