@@ -308,6 +308,10 @@ impl UserAccount {
     pub fn update_state(&mut self, state_update: &JsValue) -> Result<(), JsValue> {
         let state_update: StateUpdate = state_update.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         
+        Ok(self.update_state_internal(state_update))
+    }
+
+    fn update_state_internal(&mut self, state_update: StateUpdate) -> () {
         if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
             self.inner.borrow_mut().state.tree.add_leafs_and_commitments(state_update.new_leafs, state_update.new_commitments);
         }
@@ -322,26 +326,28 @@ impl UserAccount {
             });
         });
 
-        Ok(())
+        ()
     }
 
     
     #[wasm_bindgen(js_name = "updateStateColdStorage")]
     pub fn update_state_cold_storage(&mut self, bulks: Vec<js_sys::Uint8Array>) -> Result<Vec<DecryptedMemo>, JsValue> {
-        //use web_sys::console;
-
-        //console::log_1(&"Hello from wasm update_state_cold_storage function".into());
-
-        return Ok(vec![]);
-
-        let eta = &self.inner.borrow().keys.eta;
-        let params = &self.inner.borrow().params;
+        use web_sys::console;
 
         let mut single_result: ParseResult = bulks.into_iter().map(|array| {
             let bulk_data = array.to_vec();
             let bulk: BulkData = bincode::deserialize(&bulk_data).unwrap();
-            let bulk_results: Vec<ParseResult> = bulk.txs.into_par_iter().map(|tx| -> ParseResult {
-                tx_parser::parse_tx(tx.index, &tx.commitment, &tx.memo, eta, params)
+            let eta = &self.inner.borrow().keys.eta;
+            let params = &self.inner.borrow().params;
+            let bulk_results: Vec<ParseResult> = bulk.txs.into_iter().map(|tx| -> ParseResult {
+                tx_parser::parse_tx(
+                    tx.index,
+                    &tx.commitment,
+                    &tx.memo,
+                    Some(&tx.tx_hash),
+                    eta,
+                    params
+                )
             }).collect();
 
             bulk_results
@@ -359,6 +365,8 @@ impl UserAccount {
             }
         });
 
+        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #1".into());
+
         let state_update = single_result.state_update;
 
         single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
@@ -373,20 +381,11 @@ impl UserAccount {
             })
             .collect();
 
-        if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
-            self.inner.borrow_mut().state.tree.add_leafs_and_commitments(state_update.new_leafs, state_update.new_commitments);
-        }
+        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #2".into());
 
-        state_update.new_accounts.into_iter().for_each(|(at_index, account)| {
-            self.inner.borrow_mut().state.add_account(at_index, account);
-        });
+        self.update_state_internal(state_update);
 
-        state_update.new_notes.into_iter().for_each(|notes| {
-            notes.into_iter().for_each(|(at_index, note)| {
-                self.inner.borrow_mut().state.add_note(at_index, note);
-            });
-        });
-
+        console::log_1(&"[wasm]: update_state_cold_storage checkpoint #3".into());
 
         Ok(memos)
     }

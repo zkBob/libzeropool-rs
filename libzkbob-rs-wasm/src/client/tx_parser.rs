@@ -67,7 +67,7 @@ impl TxParser {
             let memo = hex::decode(memo).unwrap();
             let commitment = hex::decode(commitment).unwrap();
             
-            parse_tx(index, &commitment, &memo, &eta, params)
+            parse_tx(index, &commitment, &memo, None, &eta, params)
         }).collect();
 
         let mut parse_result = parse_results
@@ -93,7 +93,14 @@ impl TxParser {
     }
 }
 
-pub fn parse_tx(index: u64, commitment: &Vec<u8>, memo: &Vec<u8>, eta: &Num<Fr>, params: &PoolParams) -> ParseResult {
+pub fn parse_tx(
+    index: u64,
+    commitment: &Vec<u8>,
+    memo: &Vec<u8>,
+    tx_hash: Option<&Vec<u8>>,
+    eta: &Num<Fr>,
+    params: &PoolParams
+) -> ParseResult {
     let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
     let hashes: Vec<_> = (&memo[4..])
         .chunks(32)
@@ -119,10 +126,14 @@ pub fn parse_tx(index: u64, commitment: &Vec<u8>, memo: &Vec<u8>, eta: &Num<Fr>,
 
             ParseResult {
                 decrypted_memos: vec![ DecMemo {
-                    index, 
-                    acc: Some(account), 
+                    index,
+                    acc: Some(account),
                     in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
                     out_notes: out_notes.into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                    tx_hash: match tx_hash {
+                        Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
+                        _ => None,
+                    },
                     ..Default::default()
                 }],
                 state_update: StateUpdate {
@@ -153,6 +164,10 @@ pub fn parse_tx(index: u64, commitment: &Vec<u8>, memo: &Vec<u8>, eta: &Num<Fr>,
                     decrypted_memos: vec![ DecMemo{
                         index, 
                         in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                        tx_hash: match tx_hash {
+                            Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
+                            None        => None,
+                        },
                         ..Default::default()
                     }],
                     state_update: StateUpdate {
