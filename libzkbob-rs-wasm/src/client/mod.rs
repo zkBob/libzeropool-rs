@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
+use rayon::prelude::*;
+
 
 use js_sys::{Array, Promise};
 use libzeropool::{
@@ -22,7 +24,7 @@ use libzkbob_rs::{
     merkle::{Hash, Node}
 };
 use serde::{Serialize};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
 use crate::client::tx_parser::StateUpdate;
@@ -33,12 +35,16 @@ use crate::{
     keys::reduce_sk, Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, MerkleProof, Pair, PoolParams, Transaction, UserState, POOL_PARAMS,
+    DecryptedMemo,
 };
+use tx_types::JsTxType;
+use crate::client::coldstorage::{ BulkData };
+use crate::client::tx_parser::{ ParseResult };
 
 mod tx_types;
-use tx_types::JsTxType;
-
+mod coldstorage;
 mod tx_parser;
+
 
 // TODO: Find a way to expose MerkleTree,
 
@@ -317,6 +323,72 @@ impl UserAccount {
         });
 
         Ok(())
+    }
+
+    
+    #[wasm_bindgen(js_name = "updateStateColdStorage")]
+    pub fn update_state_cold_storage(&mut self, bulks: Vec<js_sys::Uint8Array>) -> Result<Vec<DecryptedMemo>, JsValue> {
+        //use web_sys::console;
+
+        //console::log_1(&"Hello from wasm update_state_cold_storage function".into());
+
+        return Ok(vec![]);
+
+        let eta = &self.inner.borrow().keys.eta;
+        let params = &self.inner.borrow().params;
+
+        let mut single_result: ParseResult = bulks.into_iter().map(|array| {
+            let bulk_data = array.to_vec();
+            let bulk: BulkData = bincode::deserialize(&bulk_data).unwrap();
+            let bulk_results: Vec<ParseResult> = bulk.txs.into_par_iter().map(|tx| -> ParseResult {
+                tx_parser::parse_tx(tx.index, &tx.commitment, &tx.memo, eta, params)
+            }).collect();
+
+            bulk_results
+        })
+        .flatten()
+        .fold(Default::default(), |acc: ParseResult, parse_result| {
+            ParseResult {
+                decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
+                state_update: StateUpdate {
+                    new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
+                    new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
+                    new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
+                    new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
+                }
+            }
+        });
+
+        let state_update = single_result.state_update;
+
+        single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
+
+        let memos = single_result.decrypted_memos
+            .into_iter()
+            //.map(|DecMemo { index, acc, in_notes, out_notes, tx_hash }| {
+            .map(|memo| -> DecryptedMemo {
+                serde_wasm_bindgen::to_value(&memo)
+                    .unwrap()
+                    .unchecked_into::<DecryptedMemo>()
+            })
+            .collect();
+
+        if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
+            self.inner.borrow_mut().state.tree.add_leafs_and_commitments(state_update.new_leafs, state_update.new_commitments);
+        }
+
+        state_update.new_accounts.into_iter().for_each(|(at_index, account)| {
+            self.inner.borrow_mut().state.add_account(at_index, account);
+        });
+
+        state_update.new_notes.into_iter().for_each(|notes| {
+            notes.into_iter().for_each(|(at_index, note)| {
+                self.inner.borrow_mut().state.add_note(at_index, note);
+            });
+        });
+
+
+        Ok(memos)
     }
 
     #[wasm_bindgen(js_name = "getRoot")]

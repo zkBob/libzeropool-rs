@@ -239,6 +239,9 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "IWithdrawData[]")]
     pub type IMultiWithdrawData;
 
+    #[wasm_bindgen(typescript_type = "DecryptedMemo")]
+    pub type DecryptedMemo;
+
     #[wasm_bindgen(typescript_type = "DecryptedMemo[]")]
     pub type DecryptedMemos;
 

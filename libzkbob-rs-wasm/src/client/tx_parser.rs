@@ -20,23 +20,23 @@ pub struct StateUpdate {
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
-struct DecMemo {
-    index: u64,
-    acc: Option<Account<Fr>>,
+pub struct DecMemo {
+    pub index: u64,
+    pub acc: Option<Account<Fr>>,
     #[serde(rename = "inNotes")]
-    in_notes: Vec<IndexedNote>,
+    pub in_notes: Vec<IndexedNote>,
     #[serde(rename = "outNotes")]
-    out_notes: Vec<IndexedNote>,
+    pub out_notes: Vec<IndexedNote>,
     #[serde(rename = "txHash")]
-    tx_hash: Option<String>,
+    pub tx_hash: Option<String>,
 }
 
 #[derive(Serialize, Default)]
-struct ParseResult {
+pub struct ParseResult {
     #[serde(rename = "decryptedMemos")]
-    decrypted_memos: Vec<DecMemo>,
+    pub decrypted_memos: Vec<DecMemo>,
     #[serde(rename = "stateUpdate")]
-    state_update: StateUpdate
+    pub state_update: StateUpdate
 }
 
 #[wasm_bindgen]
@@ -66,84 +66,8 @@ impl TxParser {
             let IndexedTx{index, memo, commitment} = tx;
             let memo = hex::decode(memo).unwrap();
             let commitment = hex::decode(commitment).unwrap();
-            let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
-            let hashes: Vec<_> = (&memo[4..])
-                .chunks(32)
-                .take(num_hashes as usize)
-                .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))))
-                .collect();
             
-            let pair = cipher::decrypt_out(eta, &memo.clone(), params);
-
-            match pair {
-                Some((account, notes)) => {        
-                    let mut in_notes = Vec::new();
-                    let mut out_notes = Vec::new();
-                    notes.into_iter()
-                        .enumerate()
-                        .for_each(|(i, note)| {
-                            out_notes.push((index + 1 + (i as u64), note));
-
-                            if note.p_d == key::derive_key_p_d(note.d.to_num(), eta, params).x {
-                                in_notes.push((index + 1 + (i as u64), note));   
-                            }
-                        });
-
-                    ParseResult {
-                        decrypted_memos: vec![ DecMemo {
-                            index, 
-                            acc: Some(account), 
-                            in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
-                            out_notes: out_notes.into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
-                            ..Default::default()
-                        }],
-                        state_update: StateUpdate {
-                            new_leafs: vec![(index, hashes)],
-                            new_accounts: vec![(index, account)],
-                            new_notes: vec![in_notes],
-                            ..Default::default()
-                        }
-                    }
-                },
-                None => {
-                    let in_notes: Vec<(_, _)> = cipher::decrypt_in(eta, &memo, params)
-                        .into_iter()
-                        .enumerate()
-                        .filter_map(|(i, note)| {
-                            match note {
-                                Some(note) if note.p_d == key::derive_key_p_d(note.d.to_num(), eta, params).x => {
-                                    Some((index + 1 + (i as u64), note))
-                                }
-                                _ => None,
-                            }
-                        })
-                        .collect();
-                    
-
-                    if !in_notes.is_empty() {
-                        ParseResult {
-                            decrypted_memos: vec![ DecMemo{
-                                index, 
-                                in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
-                                ..Default::default()
-                            }],
-                            state_update: StateUpdate {
-                                new_leafs: vec![(index, hashes)],
-                                new_notes: vec![in_notes],
-                                ..Default::default()
-                            }
-                        }
-                    } else {
-                        ParseResult {
-                            state_update: StateUpdate {
-                                new_commitments: vec![(index, Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment))))],
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        }
-                    }
-                }
-            }
+            parse_tx(index, &commitment, &memo, &eta, params)
         }).collect();
 
         let mut parse_result = parse_results
@@ -166,5 +90,86 @@ impl TxParser {
             .unwrap()
             .unchecked_into::<ParseTxsResult>();
         Ok(parse_result)
+    }
+}
+
+pub fn parse_tx(index: u64, commitment: &Vec<u8>, memo: &Vec<u8>, eta: &Num<Fr>, params: &PoolParams) -> ParseResult {
+    let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
+    let hashes: Vec<_> = (&memo[4..])
+        .chunks(32)
+        .take(num_hashes as usize)
+        .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))))
+        .collect();
+    
+    let pair = cipher::decrypt_out(*eta, &memo.clone(), params);
+
+    match pair {
+        Some((account, notes)) => {        
+            let mut in_notes = Vec::new();
+            let mut out_notes = Vec::new();
+            notes.into_iter()
+                .enumerate()
+                .for_each(|(i, note)| {
+                    out_notes.push((index + 1 + (i as u64), note));
+
+                    if note.p_d == key::derive_key_p_d(note.d.to_num(), *eta, params).x {
+                        in_notes.push((index + 1 + (i as u64), note));   
+                    }
+                });
+
+            ParseResult {
+                decrypted_memos: vec![ DecMemo {
+                    index, 
+                    acc: Some(account), 
+                    in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                    out_notes: out_notes.into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                    ..Default::default()
+                }],
+                state_update: StateUpdate {
+                    new_leafs: vec![(index, hashes)],
+                    new_accounts: vec![(index, account)],
+                    new_notes: vec![in_notes],
+                    ..Default::default()
+                }
+            }
+        },
+        None => {
+            let in_notes: Vec<(_, _)> = cipher::decrypt_in(*eta, &memo, params)
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, note)| {
+                    match note {
+                        Some(note) if note.p_d == key::derive_key_p_d(note.d.to_num(), *eta, params).x => {
+                            Some((index + 1 + (i as u64), note))
+                        }
+                        _ => None,
+                    }
+                })
+                .collect();
+            
+
+            if !in_notes.is_empty() {
+                ParseResult {
+                    decrypted_memos: vec![ DecMemo{
+                        index, 
+                        in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                        ..Default::default()
+                    }],
+                    state_update: StateUpdate {
+                        new_leafs: vec![(index, hashes)],
+                        new_notes: vec![in_notes],
+                        ..Default::default()
+                    }
+                }
+            } else {
+                ParseResult {
+                    state_update: StateUpdate {
+                        new_commitments: vec![(index, Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment))))],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            }
+        }
     }
 }
