@@ -27,6 +27,7 @@ use serde::{Serialize};
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
+use crate::ParseTxsColdStorageResult;
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -35,11 +36,10 @@ use crate::{
     keys::reduce_sk, Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, MerkleProof, Pair, PoolParams, Transaction, UserState, POOL_PARAMS,
-    DecryptedMemo,
 };
 use tx_types::JsTxType;
 use crate::client::coldstorage::{ BulkData };
-use crate::client::tx_parser::{ ParseResult };
+use crate::client::tx_parser::{ ParseResult, ParseColdStorageResult };
 
 mod tx_types;
 mod coldstorage;
@@ -336,15 +336,16 @@ impl UserAccount {
         bulks: Vec<js_sys::Uint8Array>,
         from_index: Option<u64>,    // inclusively
         to_index: Option<u64>,      // exclusively
-    ) -> Result<Vec<DecryptedMemo>, JsValue> {
+    ) -> Result<ParseTxsColdStorageResult, JsValue> {
         use web_sys::console;
 
+        let mut total_txs_cnt: usize = 0;
         let mut single_result: ParseResult = bulks.into_iter().map(|array| {
             let bulk_data = array.to_vec();
             let bulk: BulkData = bincode::deserialize(&bulk_data).unwrap();
             let eta = &self.inner.borrow().keys.eta;
             let params = &self.inner.borrow().params;
-            let range = (from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX));
+            let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
             let bulk_results: Vec<ParseResult> = bulk.txs
                 .into_par_iter()
                 .filter(|tx| range.contains(&tx.index))
@@ -359,6 +360,8 @@ impl UserAccount {
                     )
                 })
                 .collect();
+            
+            total_txs_cnt = total_txs_cnt + bulk_results.len();
 
             bulk_results
         })
@@ -375,26 +378,24 @@ impl UserAccount {
             }
         });
 
-        let memos_cnt: JsValue = single_result.decrypted_memos.len().into();
-        console::log_2(&"[ColdStorage] decrypted memos counter: ".into(), &memos_cnt);
+        let decrypted_leafs_cnt: usize = single_result.state_update.new_leafs.len();
 
-        let state_update = single_result.state_update;
+        self.update_state_internal(single_result.state_update);
 
+        
         single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
+        
+        let sync_result = ParseColdStorageResult {
+            decrypted_memos: single_result.decrypted_memos,
+            tx_cnt: total_txs_cnt,
+            decrypted_leafs_cnt: decrypted_leafs_cnt,
+        };
 
-        let memos = single_result.decrypted_memos
-            .into_iter()
-            //.map(|DecMemo { index, acc, in_notes, out_notes, tx_hash }| {
-            .map(|memo| -> DecryptedMemo {
-                serde_wasm_bindgen::to_value(&memo)
-                    .unwrap()
-                    .unchecked_into::<DecryptedMemo>()
-            })
-            .collect();
+        let sync_result = serde_wasm_bindgen::to_value(&sync_result)
+            .unwrap()
+            .unchecked_into::<ParseTxsColdStorageResult>();
 
-        self.update_state_internal(state_update);
-
-        Ok(memos)
+        Ok(sync_result)
     }
 
     #[wasm_bindgen(js_name = "getRoot")]

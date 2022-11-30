@@ -38,6 +38,15 @@ pub struct ParseResult {
     #[serde(rename = "stateUpdate")]
     pub state_update: StateUpdate
 }
+#[derive(Serialize, Default)]
+pub struct ParseColdStorageResult {
+    #[serde(rename = "decryptedMemos")]
+    pub decrypted_memos: Vec<DecMemo>,
+    #[serde(rename = "txCnt")]
+    pub tx_cnt: usize,
+    #[serde(rename = "decryptedLeafsCnt")]
+    pub decrypted_leafs_cnt: usize,
+}
 
 #[wasm_bindgen]
 pub struct TxParser {
