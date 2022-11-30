@@ -331,7 +331,12 @@ impl UserAccount {
 
     
     #[wasm_bindgen(js_name = "updateStateColdStorage")]
-    pub fn update_state_cold_storage(&mut self, bulks: Vec<js_sys::Uint8Array>) -> Result<Vec<DecryptedMemo>, JsValue> {
+    pub fn update_state_cold_storage(
+        &mut self,
+        bulks: Vec<js_sys::Uint8Array>,
+        from_index: Option<u64>,    // inclusively
+        to_index: Option<u64>,      // exclusively
+    ) -> Result<Vec<DecryptedMemo>, JsValue> {
         use web_sys::console;
 
         let mut single_result: ParseResult = bulks.into_iter().map(|array| {
@@ -339,16 +344,21 @@ impl UserAccount {
             let bulk: BulkData = bincode::deserialize(&bulk_data).unwrap();
             let eta = &self.inner.borrow().keys.eta;
             let params = &self.inner.borrow().params;
-            let bulk_results: Vec<ParseResult> = bulk.txs.into_iter().map(|tx| -> ParseResult {
-                tx_parser::parse_tx(
-                    tx.index,
-                    &tx.commitment,
-                    &tx.memo,
-                    Some(&tx.tx_hash),
-                    eta,
-                    params
-                )
-            }).collect();
+            let range = (from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX));
+            let bulk_results: Vec<ParseResult> = bulk.txs
+                .into_par_iter()
+                .filter(|tx| range.contains(&tx.index))
+                .map(|tx| -> ParseResult {
+                    tx_parser::parse_tx(
+                        tx.index,
+                        &tx.commitment,
+                        &tx.memo,
+                        Some(&tx.tx_hash),
+                        eta,
+                        params
+                    )
+                })
+                .collect();
 
             bulk_results
         })
@@ -365,8 +375,8 @@ impl UserAccount {
             }
         });
 
-        let js: JsValue = single_result.decrypted_memos.len().into();
-        console::log_2(&"[ColdStorage] decrypted memos counter: ".into(), &js);
+        let memos_cnt: JsValue = single_result.decrypted_memos.len().into();
+        console::log_2(&"[ColdStorage] decrypted memos counter: ".into(), &memos_cnt);
 
         let state_update = single_result.state_update;
 
