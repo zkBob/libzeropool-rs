@@ -145,7 +145,20 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         index
     }
 
-    pub fn add_leafs_and_commitments(&mut self, leafs: Vec<(u64, Vec<Hash<P::Fr>>)>, commitments: Vec<(u64, Hash<P::Fr>)>) {
+    pub fn add_leafs_and_commitments(
+        &mut self, 
+        leafs: Vec<(u64, Vec<Hash<P::Fr>>)>, 
+        commitments: Vec<(u64, Hash<P::Fr>)>
+    ) {
+        self.add_leafs_and_commitments_with_siblings(leafs, commitments, None)
+    }
+
+    pub fn add_leafs_and_commitments_with_siblings(
+        &mut self, 
+        leafs: Vec<(u64, Vec<Hash<P::Fr>>)>, 
+        commitments: Vec<(u64, Hash<P::Fr>)>, 
+        siblings: Option<HashMap<(u32, u64), Hash<P::Fr>>>
+    ) {
         if leafs.is_empty() && commitments.is_empty() {
             return;
         }
@@ -179,6 +192,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                     virtual_nodes.insert((0_u32, index + i as u64), leaf);
                 });
             });
+
+        if siblings.is_some() {
+            virtual_nodes.extend(siblings.unwrap())
+        }
 
         let original_next_index = self.next_index;
         self.update_next_index_from_node(0, last_bound_index);
@@ -1226,22 +1243,39 @@ mod tests {
 
     #[test]
     fn test_rollback_all_works_correctly() {
-        let remove_size: u64 = 24;
+        let tree_size: u64 = 256;
+        let remove_size: u64 = 128;
+        let first_part: u64 = tree_size - remove_size;
 
         let mut rng = CustomRng;
         let mut tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
 
         let original_root = tree.get_root();
 
-        for index in 0..remove_size {
+        for index in 0..first_part {
             let leaf = rng.gen();
             tree.add_hash(index, leaf, false);
         }
 
-        let rollback_result = tree.rollback(0);
-        assert!(rollback_result.is_none());
-        let rollback_root = tree.get_root();
-        assert_eq!(rollback_root, original_root);
+        let one_more_root = tree.get_root();
+
+        for index in first_part..tree_size {
+            let leaf = rng.gen();
+            tree.add_hash(index, leaf, false);
+        }
+
+        // 1st rollback
+        let rollback1_result = tree.rollback(first_part);
+        assert!(rollback1_result.is_none());
+        let rollback1_root = tree.get_root();
+        assert_eq!(rollback1_root, one_more_root);
+        assert_eq!(tree.next_index, first_part);
+
+        // 2nd rollback
+        let rollback2_result = tree.rollback(0);
+        assert!(rollback2_result.is_none());
+        let rollback2_root = tree.get_root();
+        assert_eq!(rollback2_root, original_root);
         assert_eq!(tree.next_index, 0);
     }
 
@@ -1629,5 +1663,49 @@ mod tests {
         let root = tree.get_root();
 
         assert_eq!(optimistic_root.to_string(), root.to_string());
+    }
+
+
+    #[test_case(10, 5, 5)]
+    fn test_partial_tree(tx_count: u64, skip_txs_count: u64, leafs_count: u64) {
+        let mut rng = CustomRng;
+        let mut full_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
+        let mut partial_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
+
+        let leafs: Vec<(u64, Vec<_>)> = (0..tx_count)
+            .map(|i| {
+                (i * (constants::OUT + 1) as u64, (0..leafs_count).map(|_| rng.gen()).collect())
+            })
+            .collect();
+
+        for (index, leafs) in leafs.clone().into_iter() {
+            full_tree.add_hashes(index, leafs)
+        }
+        
+        let mut sub_leafs: Vec<(u64, Vec<_>)> = Vec::new();
+        let sub_commitments: Vec<(u64, _)> = Vec::new();
+        (skip_txs_count as usize..leafs.len()).for_each(|i| {
+            sub_leafs.push((leafs[i as usize].0, leafs[i as usize].1.clone()));
+        });
+
+        // workaround: get left sibling nodes for the odd ones
+        let mut siblings = HashMap::new();
+        (0..constants::HEIGHT as u32).for_each(|h| {
+            let level_idx = (skip_txs_count << constants::OUTPLUSONELOG) >> h;
+            if level_idx % 2 == 1 {
+                let sibling_idx = level_idx ^ 1;
+                let hash = full_tree.get(h, sibling_idx);
+                siblings.insert((h, sibling_idx), hash);
+            }
+        });
+        // add left siblings to the partial tree
+        //partial_tree.put_hashes(siblings);
+        
+        // add the tree part to the second tree
+        partial_tree.add_leafs_and_commitments_with_siblings(sub_leafs, sub_commitments, Some(siblings));
+        //partial_tree.add_leafs_and_commitments(sub_leafs, sub_commitments);
+
+        assert_eq!(full_tree.next_index(), partial_tree.next_index());
+        assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
     }
 }
