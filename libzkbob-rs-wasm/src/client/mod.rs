@@ -337,46 +337,67 @@ impl UserAccount {
         from_index: Option<u64>,    // inclusively
         to_index: Option<u64>,      // exclusively
     ) -> Result<ParseTxsColdStorageResult, JsValue> {
-        use web_sys::console;
+        const MAX_SUPPORTED_BULK_VERSION: u8 = 1;
 
         let mut total_txs_cnt: usize = 0;
-        let mut single_result: ParseResult = bulks.into_iter().map(|array| {
+        let bulks_obj: Result<Vec<BulkData>, JsValue> = bulks.into_iter().map(|array| {
             let bulk_data = array.to_vec();
-            let bulk: BulkData = bincode::deserialize(&bulk_data).unwrap();
-            let eta = &self.inner.borrow().keys.eta;
-            let params = &self.inner.borrow().params;
-            let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
-            let bulk_results: Vec<ParseResult> = bulk.txs
-                .into_par_iter()
-                .filter(|tx| range.contains(&tx.index))
-                .map(|tx| -> ParseResult {
-                    tx_parser::parse_tx(
-                        tx.index,
-                        &tx.commitment,
-                        &tx.memo,
-                        Some(&tx.tx_hash),
-                        eta,
-                        params
-                    )
-                })
-                .collect();
-            
-            total_txs_cnt = total_txs_cnt + bulk_results.len();
+            let bulk: BulkData = match bincode::deserialize(&bulk_data) {
+                Ok(res) => res,
+                Err(e) => return Err(js_err!(&format!("Cannot parse bulk data: {}", e))),
+            };
 
-            bulk_results
-        })
-        .flatten()
-        .fold(Default::default(), |acc: ParseResult, parse_result| {
-            ParseResult {
-                decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
-                state_update: StateUpdate {
-                    new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
-                    new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
-                    new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
-                    new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
-                }
+            if bulk.bulk_version > MAX_SUPPORTED_BULK_VERSION {
+                return Err(js_err!(&format!("Incorrect bluk vesion {}, supported {}", bulk.bulk_version, MAX_SUPPORTED_BULK_VERSION)))
             }
-        });
+
+            Ok(bulk)
+        })
+        .collect();
+
+        if let Err(e) = bulks_obj {
+            return Err(e);
+        }
+
+
+        let mut single_result: ParseResult = bulks_obj
+            .unwrap()
+            .into_iter()
+            .map(|bulk| -> Vec<ParseResult> {
+                let eta = &self.inner.borrow().keys.eta;
+                let params = &self.inner.borrow().params;
+                let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
+                let bulk_results: Vec<ParseResult> = bulk.txs
+                    .into_par_iter()
+                    .filter(|tx| range.contains(&tx.index))
+                    .map(|tx| -> ParseResult {
+                        tx_parser::parse_tx(
+                            tx.index,
+                            &tx.commitment,
+                            &tx.memo,
+                            Some(&tx.tx_hash),
+                            eta,
+                            params
+                        )
+                    })
+                    .collect();
+                
+                total_txs_cnt = total_txs_cnt + bulk_results.len();
+
+                bulk_results
+            })
+            .flatten()
+            .fold(Default::default(), |acc: ParseResult, parse_result| {
+                ParseResult {
+                    decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
+                    state_update: StateUpdate {
+                        new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
+                        new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
+                        new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
+                        new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
+                    }
+                }
+            });
 
         let decrypted_leafs_cnt: usize = single_result.state_update.new_leafs.len();
 
