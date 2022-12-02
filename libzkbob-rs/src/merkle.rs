@@ -150,14 +150,21 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         leafs: Vec<(u64, Vec<Hash<P::Fr>>)>, 
         commitments: Vec<(u64, Hash<P::Fr>)>
     ) {
-        self.add_leafs_and_commitments_with_siblings(leafs, commitments, None)
+        self.add_leafs_commitments_and_siblings(leafs, commitments, None)
     }
 
-    pub fn add_leafs_and_commitments_with_siblings(
+    // The common method which can be used for full or partial tree update
+    // Supposed that partial tree can ommits his left part and should have no other gaps
+    // Siblings - tree nodes to restore correct tree root in case of left tree part absence
+    // Sibligs for concrete index should be generated with MerkleTree::get_left_siblings method
+    // The leafs or commitmentss MUST be started with an index which was used to generating siblings,
+    //  e.g. if siblings were generated for index 1024, the commitment@8 or leaf@1024 must be presented
+    //  !otherwise tree becomes corrupted!
+    pub fn add_leafs_commitments_and_siblings(
         &mut self, 
         leafs: Vec<(u64, Vec<Hash<P::Fr>>)>, 
         commitments: Vec<(u64, Hash<P::Fr>)>, 
-        siblings: Option<HashMap<(u32, u64), Hash<P::Fr>>>
+        siblings: Option<Vec<Node<P::Fr>>>
     ) {
         if leafs.is_empty() && commitments.is_empty() {
             return;
@@ -165,6 +172,8 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
         let mut last_bound_index: u64 = 0;
         let mut first_bound_index: u64 = u64::MAX;
+
+        // add commitments @ height OUTPLUSONELOG
         let mut virtual_nodes: HashMap<(u32, u64), Hash<P::Fr>> = commitments
             .into_iter()
             .map(|(index, hash)| {
@@ -175,6 +184,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             })
             .collect();
         
+        // add leafs (accounts + notes) @ height 0
         leafs.into_iter()
             .filter(|(_, leafs)| !leafs.is_empty())
             .for_each(|(index, leafs)| {
@@ -193,9 +203,16 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                 });
             });
 
-        if siblings.is_some() {
-            virtual_nodes.extend(siblings.unwrap())
-        }
+        // append sibling nodes
+        virtual_nodes.extend(siblings
+            .unwrap_or(vec![])
+            .into_iter()
+            .map(|node| {
+                first_bound_index = first_bound_index.min(node.index << node.height);
+                last_bound_index = last_bound_index.max(((node.index + 1) << node.height) - 1);
+                ((node.height, node.index), node.value)
+            })
+        );
 
         let original_next_index = self.next_index;
         self.update_next_index_from_node(0, last_bound_index);
@@ -361,6 +378,27 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             Ok(Some(ref val)) => Some(Hash::<P::Fr>::try_from_slice(val).unwrap()),
             _ => None,
         }
+    }
+
+    // Partial tree support
+    pub fn get_left_siblings(&self, index: u64) -> Vec<Node<P::Fr>> {
+        (0..constants::HEIGHT as u32)
+            .into_iter()
+            .filter_map(|h| {
+                let level_idx = index >> h;
+                if level_idx % 2 == 1 {
+                    let sibling_idx = level_idx ^ 1;
+                    let hash = self.get(h, sibling_idx);
+                    return Some(Node {
+                        index: sibling_idx,
+                        height: h,
+                        value: hash,
+                    });
+                }
+
+                None
+            })
+            .collect()
     }
 
     pub fn get_proof_unchecked<const H: usize>(&self, index: u64) -> MerkleProof<P::Fr, { H }> {
@@ -1666,8 +1704,14 @@ mod tests {
     }
 
 
-    #[test_case(10, 5, 5)]
-    fn test_partial_tree(tx_count: u64, skip_txs_count: u64, leafs_count: u64) {
+    #[test_case(10, 0, 1, 0.5)]
+    #[test_case(10, 2, 1, 0.5)]
+    #[test_case(10, 9, 1, 0.5)]
+    #[test_case(20, 5, 2, 0.5)]
+    #[test_case(50, 0, 10, 0.5)]
+    #[test_case(50, 42, 10, 0.5)]
+    #[test_case(50, 49, 127, 0.5)]
+    fn test_partial_tree(tx_count: u64, skip_txs_count: u64, leafs_count: u64, commitments_probability: f64) {
         let mut rng = CustomRng;
         let mut full_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
         let mut partial_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
@@ -1678,32 +1722,36 @@ mod tests {
             })
             .collect();
 
+        let commitments: Vec<(u64, _)> = leafs
+            .clone()
+            .into_iter()
+            .map(|(index, leafs)| {
+                let mut out_hashes = leafs.clone();
+                out_hashes.resize(constants::OUT+1, full_tree.zero_note_hashes[0]);
+                let commitment = tx::out_commitment_hash(out_hashes.as_slice(), &POOL_PARAMS.clone());
+                (index, commitment)
+            }).collect();
+
         for (index, leafs) in leafs.clone().into_iter() {
             full_tree.add_hashes(index, leafs)
         }
         
+        // part of the full tree
         let mut sub_leafs: Vec<(u64, Vec<_>)> = Vec::new();
-        let sub_commitments: Vec<(u64, _)> = Vec::new();
+        let mut sub_commitments: Vec<(u64, _)> = Vec::new();
         (skip_txs_count as usize..leafs.len()).for_each(|i| {
-            sub_leafs.push((leafs[i as usize].0, leafs[i as usize].1.clone()));
-        });
-
-        // workaround: get left sibling nodes for the odd ones
-        let mut siblings = HashMap::new();
-        (0..constants::HEIGHT as u32).for_each(|h| {
-            let level_idx = (skip_txs_count << constants::OUTPLUSONELOG) >> h;
-            if level_idx % 2 == 1 {
-                let sibling_idx = level_idx ^ 1;
-                let hash = full_tree.get(h, sibling_idx);
-                siblings.insert((h, sibling_idx), hash);
+            if rng.gen_bool(commitments_probability) {
+                sub_commitments.push(commitments[i as usize]);
+            } else {
+                sub_leafs.push((leafs[i as usize].0, leafs[i as usize].1.clone()));
             }
         });
-        // add left siblings to the partial tree
-        //partial_tree.put_hashes(siblings);
+        
+        // get left siblings for the partial tree
+        let siblings = full_tree.get_left_siblings(skip_txs_count << constants::OUTPLUSONELOG);
         
         // add the tree part to the second tree
-        partial_tree.add_leafs_and_commitments_with_siblings(sub_leafs, sub_commitments, Some(siblings));
-        //partial_tree.add_leafs_and_commitments(sub_leafs, sub_commitments);
+        partial_tree.add_leafs_commitments_and_siblings(sub_leafs, sub_commitments, Some(siblings));
 
         assert_eq!(full_tree.next_index(), partial_tree.next_index());
         assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
