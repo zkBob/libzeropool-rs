@@ -402,16 +402,26 @@ impl UserAccount {
             .borrow()
             .state
             .tree
-            .get_left_siblings(index)
-            .into_iter()
-            .map(|node| {
-                serde_wasm_bindgen::to_value(&node)
-                    .unwrap()
-                    .unchecked_into::<TreeNode>()
-            })
-            .collect();
+            .get_left_siblings(index);
 
-        Ok(siblings)
+        
+        match siblings {
+            Some(val) => {
+                let result = val
+                    .into_iter()
+                    .map(|node| {
+                        serde_wasm_bindgen::to_value(&node)
+                            .unwrap()
+                            .unchecked_into::<TreeNode>()
+                    })
+                    .collect();
+                
+                Ok(result)
+            },
+            None => Err(js_err!(&format!("Tree is undefined at index {}", index)))
+        }
+        
+            
     }
 
     #[wasm_bindgen(js_name = "getMerkleProof")]

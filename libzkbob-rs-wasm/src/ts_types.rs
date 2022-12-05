@@ -82,9 +82,9 @@ export interface MerkleProof {
 }
 
 export interface TreeNode {
-    pub index: u64,
-    pub height: u32,
-    pub value: string,
+    index: number;
+    height: number;
+    value: string;
 }
 
 export interface Proof {

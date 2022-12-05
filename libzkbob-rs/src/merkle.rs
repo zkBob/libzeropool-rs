@@ -453,8 +453,11 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     // To build Merkle tree from the specified index we should generate left siblings
     // from the commitment height (in case of index is a multiple of constants::OUT + 1) to the root height
     // This method should be used on the relayer side to provide the client needed siblings
-    pub fn get_left_siblings(&self, index: u64) -> Vec<Node<P::Fr>> {
-        (0..constants::HEIGHT)
+    pub fn get_left_siblings(&self, index: u64) -> Option<Vec<Node<P::Fr>>> {
+        if index > self.next_index {
+            return None
+        }
+        let array = (0..constants::HEIGHT)
             .into_iter()
             .filter_map(|h| {
                 let level_idx = index >> h;
@@ -470,7 +473,9 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
                 None
             })
-            .collect()
+            .collect();
+
+        Some(array)
     }
 
     pub fn get_proof_unchecked<const H: usize>(&self, index: u64) -> MerkleProof<P::Fr, { H }> {
@@ -1821,11 +1826,10 @@ mod tests {
         
         // get left siblings for the partial tree
         let siblings = full_tree.get_left_siblings(skip_txs_count << constants::OUTPLUSONELOG);
+        assert!(siblings.is_some());
         
         // add the tree part to the second tree
-        partial_tree.add_leafs_commitments_and_siblings(sub_leafs, sub_commitments, Some(siblings));
-
-        let partial_tree_start = skip_txs_count << constants::OUTPLUSONELOG;
+        partial_tree.add_leafs_commitments_and_siblings(sub_leafs, sub_commitments, siblings);
 
         assert_eq!(full_tree.next_index(), partial_tree.next_index());
         assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
