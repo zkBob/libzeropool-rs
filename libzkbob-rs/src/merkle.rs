@@ -322,21 +322,26 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     // Calculate tree node (from the tree root to the leafs level)
     // Returns None if there is no node and calculation is impossible
+    // The calculation could be impossible in case of tree part absence for example
     fn get_with_next_index_recursive(&self, height: u32, index: u64, next_index: u64) -> Option<Hash<P::Fr>> {
         let node_left = index * (1 << height);
         let node_right = (index + 1) * (1 << height);
-        if node_right <= next_index {
-            return Some(self.zero_note_hashes[height as usize]);
-        } else if node_left >= next_index {
+        if node_left >= next_index {
+            //print!("💬[{}.{}]  ", height, index);
             return Some(self.default_hashes[height as usize]);
         }
 
         let mut node = None;
         if node_right <= next_index {
+            // get the actual value from the tree in case the current subtree
+            // placed inside our range [0..next_index]
             node = self.get_opt(height, index);
         }
         match node {
-            Some(val) => Some(val),
+            Some(val) => {
+                //print!("✅[{}.{}]  ", height, index);
+                Some(val)
+            },
             _ => {
                 if height == 0 {
                     // We went down to the leaves level but the node is absence
@@ -357,7 +362,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                     return None
                 }
 
-                print!("{}.{}+{}.{}  ", height - 1, index << 1, height - 1, (index << 1) + 1);
+                //print!("🧮[{}.{}]={}.{}+{}.{}  ", height, index, height - 1, index << 1, height - 1, (index << 1) + 1);
 
                 let pair = [left_child?, right_child?];
                 let hash = poseidon(pair.as_ref(), self.params.compress());
@@ -383,7 +388,8 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     // Get root at specified index (without rollback)
     // This method can be used for tree integrity check
-    // index should point to the first transaction leaf
+    // index is a possition within Merkle tree level 0
+    // and should point to the first transaction leaf
     //  (to be a multiple of constants::OUT + 1)
     pub fn get_root_at(&self, index: u64) -> Option<Hash<P::Fr>> {
         if index & constants::OUT as u64 != 0 ||
@@ -1819,15 +1825,17 @@ mod tests {
         // add the tree part to the second tree
         partial_tree.add_leafs_commitments_and_siblings(sub_leafs, sub_commitments, Some(siblings));
 
+        let partial_tree_start = skip_txs_count << constants::OUTPLUSONELOG;
+
         assert_eq!(full_tree.next_index(), partial_tree.next_index());
         assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
     }
 
     #[test_case(10, 1, 1)]
-    //#[test_case(10, 1, 2)]
-    //#[test_case(10, 1, 5)]
-    //#[test_case(10, 65, 8)]
-    //#[test_case(20, 127, 17)]
+    #[test_case(10, 1, 2)]
+    #[test_case(10, 1, 5)]
+    #[test_case(10, 65, 8)]
+    #[test_case(20, 127, 17)]
     fn test_root_at(tx_count: u64, leafs_count: u64, check_root_tx_index: u64) {
         let mut rng = CustomRng;
         let mut tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
@@ -1845,7 +1853,7 @@ mod tests {
 
         // build the first part of tree
         for (index, leafs) in leafs.clone().into_iter() {
-            if index < check_root_tx_index {
+            if index < check_tx_next_index {
                 tree.add_hashes(index, leafs)
             }
         }

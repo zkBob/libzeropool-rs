@@ -338,6 +338,15 @@ impl UserAccount {
         root
     }
 
+    #[wasm_bindgen(js_name = "getRootAt")]
+    pub fn get_root_at(&mut self, index: u64) -> Result<String, JsValue> {
+
+        match self.inner.borrow_mut().state.tree.get_root_at(index) {
+            Some(val) => Ok(val.to_string()),
+            None => Err(js_err!(&format!("Tree doesn't contain sufficient data to calculate root at index {}", index)))
+        }
+    }
+
     #[wasm_bindgen(js_name = "totalBalance")]
     /// Returns user's total balance (account + available notes).
     pub fn total_balance(&self) -> String {
