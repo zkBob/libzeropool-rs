@@ -81,6 +81,12 @@ export interface MerkleProof {
     path: boolean[];
 }
 
+export interface TreeNode {
+    pub index: u64,
+    pub height: u32,
+    pub value: string,
+}
+
 export interface Proof {
     inputs: string[];
     proof: SnarkProof;
@@ -193,6 +199,12 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "TreeSec")]
     pub type TreeSec;
+
+    #[wasm_bindgen(typescript_type = "TreeNode")]
+    pub type TreeNode;
+
+    #[wasm_bindgen(typescript_type = "TreeNode[]")]
+    pub type TreeNodes;
 
     #[wasm_bindgen(typescript_type = "Proof")]
     pub type Proof;

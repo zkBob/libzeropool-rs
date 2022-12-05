@@ -154,10 +154,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     }
 
     // The common method which can be used for full or partial tree update
-    // Supposed that partial tree can ommits his left part and should have no other gaps
-    // Siblings - tree nodes to restore correct tree root in case of left tree part absence
+    // Supposed that partial tree can ommit his left part and should have no other gaps
+    // Siblings are tree nodes to restore correct tree root in case of left tree part absence
     // Sibligs for concrete index should be generated with MerkleTree::get_left_siblings method
-    // The leafs or commitmentss MUST be started with an index which was used to generating siblings,
+    // The leafs or commitments MUST be started with an index which was used to generating siblings,
     //  e.g. if siblings were generated for index 1024, the commitment@8 or leaf@1024 must be presented
     //  !otherwise tree becomes corrupted!
     pub fn add_leafs_commitments_and_siblings(
@@ -320,6 +320,55 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         }
     }
 
+    // Calculate tree node (from the tree root to the leafs level)
+    // Returns None if there is no node and calculation is impossible
+    fn get_with_next_index_recursive(&self, height: u32, index: u64, next_index: u64) -> Option<Hash<P::Fr>> {
+        let node_left = index * (1 << height);
+        let node_right = (index + 1) * (1 << height);
+        if node_right <= next_index {
+            return Some(self.zero_note_hashes[height as usize]);
+        } else if node_left >= next_index {
+            return Some(self.default_hashes[height as usize]);
+        }
+
+        let mut node = None;
+        if node_right <= next_index {
+            node = self.get_opt(height, index);
+        }
+        match node {
+            Some(val) => Some(val),
+            _ => {
+                if height == 0 {
+                    // We went down to the leaves level but the node is absence
+                    // Check transaction existence (each transaction should have account leaf)
+                    let first_tx_leaf_index = (index >> constants::OUTPLUSONELOG) << constants::OUTPLUSONELOG;
+                    if self.get_opt(0, first_tx_leaf_index).is_some() {
+                        return Some(self.zero_note_hashes[height as usize]);
+                    }
+
+                    // More likely the tree is not filled here (partial tree case)
+                    return None;
+                }
+
+                let left_child = self.get_with_next_index_recursive(height - 1, index << 1, next_index);
+                let right_child = self.get_with_next_index_recursive(height - 1, (index << 1) + 1, next_index);
+
+                if left_child.is_none() || right_child.is_none() {
+                    return None
+                }
+
+                print!("{}.{}+{}.{}  ", height - 1, index << 1, height - 1, (index << 1) + 1);
+
+                let pair = [left_child?, right_child?];
+                let hash = poseidon(pair.as_ref(), self.params.compress());
+
+                //println!("");
+
+                return Some(hash)
+            }
+        }
+    }
+
     pub fn last_leaf(&self) -> Hash<P::Fr> {
         // todo: can last leaf be an zero note?
         match self.get_opt(0, self.next_index.saturating_sub(1)) {
@@ -330,6 +379,20 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     pub fn get_root(&self) -> Hash<P::Fr> {
         self.get(constants::HEIGHT as u32, 0)
+    }
+
+    // Get root at specified index (without rollback)
+    // This method can be used for tree integrity check
+    // index should point to the first transaction leaf
+    //  (to be a multiple of constants::OUT + 1)
+    pub fn get_root_at(&self, index: u64) -> Option<Hash<P::Fr>> {
+        if index & constants::OUT as u64 != 0 ||
+            index > self.next_index()
+        {
+            return None;
+        }
+
+        return self.get_with_next_index_recursive(constants::HEIGHT as u32, 0, index)
     }
 
     pub fn get_root_after_virtual<I>(
@@ -381,17 +444,20 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     }
 
     // Partial tree support
+    // To build Merkle tree from the specified index we should generate left siblings
+    // from the commitment height (in case of index is a multiple of constants::OUT + 1) to the root height
+    // This method should be used on the relayer side to provide the client needed siblings
     pub fn get_left_siblings(&self, index: u64) -> Vec<Node<P::Fr>> {
-        (0..constants::HEIGHT as u32)
+        (0..constants::HEIGHT)
             .into_iter()
             .filter_map(|h| {
                 let level_idx = index >> h;
                 if level_idx % 2 == 1 {
                     let sibling_idx = level_idx ^ 1;
-                    let hash = self.get(h, sibling_idx);
+                    let hash = self.get(h as u32, sibling_idx);
                     return Some(Node {
                         index: sibling_idx,
-                        height: h,
+                        height: h as u32,
                         value: hash,
                     });
                 }
@@ -1755,5 +1821,58 @@ mod tests {
 
         assert_eq!(full_tree.next_index(), partial_tree.next_index());
         assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
+    }
+
+    #[test_case(10, 1, 1)]
+    //#[test_case(10, 1, 2)]
+    //#[test_case(10, 1, 5)]
+    //#[test_case(10, 65, 8)]
+    //#[test_case(20, 127, 17)]
+    fn test_root_at(tx_count: u64, leafs_count: u64, check_root_tx_index: u64) {
+        let mut rng = CustomRng;
+        let mut tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
+
+        // get root on a void tree
+        let root_0 = tree.get_root();
+
+        let leafs: Vec<(u64, Vec<_>)> = (0..tx_count)
+            .map(|i| {
+                (i * (constants::OUT + 1) as u64, (0..leafs_count).map(|_| rng.gen()).collect())
+            })
+            .collect();
+
+        let check_tx_next_index = check_root_tx_index * (constants::OUT as u64 + 1);
+
+        // build the first part of tree
+        for (index, leafs) in leafs.clone().into_iter() {
+            if index < check_root_tx_index {
+                tree.add_hashes(index, leafs)
+            }
+        }
+
+        // get root at checkpoint
+        let root_checkpoint = tree.get_root();
+
+        // build the second part of tree
+        for (index, leafs) in leafs.clone().into_iter() {
+            if index >= check_root_tx_index {
+                tree.add_hashes(index, leafs)
+            }
+        }
+
+        // get root on a full tree
+        let root_last = tree.get_root();
+
+        // get roots at the specified indexes
+        let root_at_0 = tree.get_root_at(0);
+        let root_at_checkpoint = tree.get_root_at(check_tx_next_index);
+        let root_at_last = tree.get_root_at(tree.next_index);
+
+        assert!(root_at_0.is_some());
+        assert!(root_at_checkpoint.is_some());
+        assert!(root_at_last.is_some());
+        assert_eq!(root_at_0.unwrap(), root_0);
+        assert_eq!(root_at_checkpoint.unwrap(), root_checkpoint);
+        assert_eq!(root_at_last.unwrap(), root_last);
     }
 }
