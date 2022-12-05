@@ -245,6 +245,7 @@ pub fn merkle_get_left_siblings(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                     let mut node_bytes = vec![];
                     node.value.serialize(&mut node_bytes).unwrap();
+                    node_bytes.reverse();
                     let node_string = hex::encode(node_bytes);
 
 
