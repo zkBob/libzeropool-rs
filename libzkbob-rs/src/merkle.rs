@@ -859,7 +859,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         let mut result: Option<u64> = None;
 
         let rollback_index = if Some(rollback_index) <= self.first_index() {
-            0   // supporting rollbacck for th partial tree
+            0   // supporting rollback for the partial tree
         } else {
             rollback_index
         };
@@ -886,6 +886,8 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                 result = Some(nodes_request_index)
             }
         }
+        
+
 
         // Update next_index.
         let original_next_index = self.next_index;
@@ -904,9 +906,33 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         }
 
         // remove leaves
+        /* // OLD IMPLEMENTATION: VERY SLOW
         for index in (rollback_index..original_next_index).rev() {
             self.remove_leaf(index);
-        }
+        }*/
+
+        // NEW IMPLEMENTATION
+        let mut batch = self.db.transaction();
+
+        self.db
+            .iter(DbCols::Leaves as u32)
+            .filter_map(|(key, _)| {
+                let (height, index) = Self::parse_node_key(&key);
+                let left_index = index << height;
+                let right_index = (index + 1) << height;
+                if right_index > rollback_index {
+                    return Some(key);
+                } else {
+                    return None;
+                }
+            })
+            .for_each(|key| {
+                batch.delete(DbCols::Leaves as u32, &key);
+                //batch.delete(DbCols::TempLeaves as u32, &key);
+            });
+
+
+        self.db.write(batch).unwrap();
 
         result
     }
