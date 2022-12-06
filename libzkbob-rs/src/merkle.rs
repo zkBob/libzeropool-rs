@@ -22,6 +22,7 @@ pub type Hash<F> = Num<F>;
 
 const NUM_COLUMNS: u32 = 4;
 const NEXT_INDEX_KEY: &[u8] = br"next_index";
+const FIRST_INDEX_KEY: &[u8] = br"first_index";
 enum DbCols {
     Leaves = 0,
     TempLeaves = 1,
@@ -34,6 +35,7 @@ pub struct MerkleTree<D: KeyValueDB, P: PoolParams> {
     params: P,
     default_hashes: Vec<Hash<P::Fr>>,
     zero_note_hashes: Vec<Hash<P::Fr>>,
+    first_index: Option<u64>,
     next_index: u64,
 }
 
@@ -90,9 +92,43 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         
                     if height == 0 && index >= cur_next_index {
                         cur_next_index = Self::calc_next_index(index);
+                    } else if height == constants::OUTPLUSONELOG as u32 &&
+                            (index << constants::OUTPLUSONELOG) >= cur_next_index
+                    {
+                        // in case of we hold just a commitment instead leafs
+                        cur_next_index = (index + 1) << constants::OUTPLUSONELOG;
                     }
                 }
                 cur_next_index
+            }
+        };
+
+        // we store first index for the partial Merkle tree support (when it synced not from start)
+        let db_first_index = db.get(DbCols::NextIndex as u32, FIRST_INDEX_KEY);
+        let first_index = match db_first_index {
+            Ok(Some(first_index)) => first_index
+                .as_slice()
+                .read_u64::<BigEndian>()
+                .ok(),
+            _ => {
+                let mut cur_first_index = u64::MAX;
+                for (k, _v) in db.iter(0) {
+                    let (height, index) = Self::parse_node_key(&k);
+        
+                    if height == 0 && index < cur_first_index {
+                        cur_first_index = index;
+                    } else if height == constants::OUTPLUSONELOG as u32 &&
+                            (index << constants::OUTPLUSONELOG) < cur_first_index
+                    {
+                        // in case of we hold just a commitment instead leafs
+                        cur_first_index = index << constants::OUTPLUSONELOG;
+                    }
+                }
+                if cur_first_index != u64::MAX {
+                    Some(cur_first_index)
+                } else {
+                    None
+                }
             }
         };
 
@@ -102,6 +138,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             default_hashes: Self::gen_default_hashes(&params),
             zero_note_hashes: Self::gen_empty_note_hashes(&params),
             params,
+            first_index,
             next_index,
         }
     }
@@ -118,6 +155,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     ) {
         // todo: revert index change if update fails?
         let next_index_was_updated = self.update_next_index_from_node(height, index);
+
+        if height == 0 || height == constants::OUTPLUSONELOG as u32 {
+            self.update_first_index_from_node(height, index);
+        }
 
         if hash == self.zero_note_hashes[height as usize] && !next_index_was_updated {
             return;
@@ -171,13 +212,15 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         }
 
         let mut last_bound_index: u64 = 0;
-        let mut first_bound_index: u64 = u64::MAX;
+        let mut first_bound_index: u64 = u64::MAX;  // left bound includes optional siblings part
+        let mut first_effective_index: u64 = u64::MAX;  // leaf or commitment (no siblings bounds)
 
         // add commitments @ height OUTPLUSONELOG
         let mut virtual_nodes: HashMap<(u32, u64), Hash<P::Fr>> = commitments
             .into_iter()
             .map(|(index, hash)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
+                first_effective_index = first_effective_index.min(index);
                 first_bound_index = first_bound_index.min(index);
                 last_bound_index = last_bound_index.max(index);
                 ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
@@ -189,6 +232,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             .filter(|(_, leafs)| !leafs.is_empty())
             .for_each(|(index, leafs)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
+                first_effective_index = first_effective_index.min(index);
                 first_bound_index = first_bound_index.min(index);
                 last_bound_index = last_bound_index.max(index + leafs.len() as u64 - 1);
                 (0..constants::OUTPLUSONELOG)
@@ -216,6 +260,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
         let original_next_index = self.next_index;
         self.update_next_index_from_node(0, last_bound_index);
+
+        if first_effective_index != u64::MAX {
+            self.update_first_index_from_node(0, first_effective_index);
+        }
 
         let update_boundaries = UpdateBoundaries {
             updated_range_left_index: original_next_index,
@@ -255,7 +303,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         assert!(new_hashes_count <= (2u64 << constants::OUTPLUSONELOG));
 
         let original_next_index = self.next_index;
-        self.update_next_index_from_node(0, start_index);
+        if new_hashes_count > 0 {
+            self.update_next_index_from_node(0, start_index);
+            self.update_first_index_from_node(0, start_index);
+        }
 
         let update_boundaries = UpdateBoundaries {
             updated_range_left_index: original_next_index,
@@ -807,6 +858,12 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     pub fn rollback(&mut self, rollback_index: u64) -> Option<u64> {
         let mut result: Option<u64> = None;
 
+        let rollback_index = if Some(rollback_index) <= self.first_index() {
+            0   // supporting rollbacck for th partial tree
+        } else {
+            rollback_index
+        };
+
         // check that nodes that are necessary for rollback were not removed by clean
         let clean_index = self.get_clean_index();
         if rollback_index < clean_index {
@@ -832,11 +889,20 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
         // Update next_index.
         let original_next_index = self.next_index;
-        self.next_index = if rollback_index > 0 {
+        let new_next_index = if rollback_index > 0 {
             Self::calc_next_index(rollback_index - 1)
         } else {
             0
         };
+        self.write_index_to_database(NEXT_INDEX_KEY, Some(new_next_index));
+        self.next_index = new_next_index;
+        
+        // Updating first index
+        if rollback_index == 0 {
+            self.write_index_to_database(FIRST_INDEX_KEY, None);
+            self.first_index = None;
+        }
+
         // remove leaves
         for index in (rollback_index..original_next_index).rev() {
             self.remove_leaf(index);
@@ -865,31 +931,72 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             .collect()
     }
 
+    pub fn first_index(&self) -> Option<u64> {
+        self.first_index
+    }
+
     pub fn next_index(&self) -> u64 {
         self.next_index
     }
 
-    fn update_next_index(&mut self, next_index: u64) -> bool {
-        if next_index >= self.next_index {
-            let mut transaction = self.db.transaction();
-            let mut data = [0u8; 8];
+    fn update_first_index(&mut self, first_index: Option<u64>) -> bool {
+        if first_index != self.first_index {
+            if first_index.is_some() &&
+                self.first_index.is_some() &&
+                first_index >= self.first_index
             {
-                let mut bytes = &mut data[..];
-                let _ = bytes.write_u64::<BigEndian>(next_index);
+                return false;
             }
-            transaction.put(DbCols::NextIndex as u32, NEXT_INDEX_KEY, &data);
-            self.db.write(transaction).unwrap();
 
-            self.next_index = next_index;
+            self.write_index_to_database(FIRST_INDEX_KEY, first_index);
+            self.first_index = first_index;
+
             true
         } else {
             false
         }
     }
 
+    fn update_next_index(&mut self,  next_index: u64) -> bool {
+        if next_index >= self.next_index {
+            self.write_index_to_database(NEXT_INDEX_KEY, Some(next_index));
+            self.next_index = next_index;
+            
+            true
+        } else {
+            false
+        }
+    }
+
+    // remove value by specified key in case of index is None
+    fn write_index_to_database(&mut self, index_db_key: &[u8], index: Option<u64>) {
+        let mut transaction = self.db.transaction();
+        if index.is_some() {
+            let mut data = [0u8; 8];
+            {
+                let mut bytes = &mut data[..];
+                let _ = bytes.write_u64::<BigEndian>(index.unwrap());
+            }
+            transaction.put(DbCols::NextIndex as u32, index_db_key, &data);
+        } else {
+            transaction.delete(DbCols::NextIndex as u32, index_db_key);
+        }
+        self.db.write(transaction).unwrap();
+    }
+
+    fn update_first_index_from_node(&mut self, height: u32, index: u64) -> bool {
+        let leaf_index = u64::pow(2, height) * index;
+        self.update_first_index(Some(Self::calc_first_index(leaf_index)))
+    }
+
     fn update_next_index_from_node(&mut self, height: u32, index: u64) -> bool {
         let leaf_index = u64::pow(2, height) * (index + 1) - 1;
         self.update_next_index(Self::calc_next_index(leaf_index))
+    }
+
+    #[inline]
+    fn calc_first_index(leaf_index: u64) -> u64 {
+        (leaf_index >> constants::OUTPLUSONELOG) << constants::OUTPLUSONELOG
     }
 
     #[inline]
@@ -1793,6 +1900,9 @@ mod tests {
         let mut full_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
         let mut partial_tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
 
+        assert!(full_tree.first_index().is_none());
+        assert!(partial_tree.first_index().is_none());
+
         let leafs: Vec<(u64, Vec<_>)> = (0..tx_count)
             .map(|i| {
                 (i * (constants::OUT + 1) as u64, (0..leafs_count).map(|_| rng.gen()).collect())
@@ -1825,14 +1935,31 @@ mod tests {
         });
         
         // get left siblings for the partial tree
-        let siblings = full_tree.get_left_siblings(skip_txs_count << constants::OUTPLUSONELOG);
+        let partial_tree_start_index = skip_txs_count << constants::OUTPLUSONELOG;
+        let siblings = full_tree.get_left_siblings(partial_tree_start_index);
         assert!(siblings.is_some());
         
         // add the tree part to the second tree
         partial_tree.add_leafs_commitments_and_siblings(sub_leafs, sub_commitments, siblings);
 
+        assert_eq!(full_tree.first_index(), Some(0));
+        assert_eq!(partial_tree.first_index(), Some(partial_tree_start_index));
         assert_eq!(full_tree.next_index(), partial_tree.next_index());
         assert_eq!(full_tree.get_root().to_string(), partial_tree.get_root().to_string());
+
+        if tx_count - skip_txs_count > 1 {
+            let check_rollback_index = (skip_txs_count + 1) << constants::OUTPLUSONELOG;
+            partial_tree.rollback(check_rollback_index);
+            assert_eq!(partial_tree.next_index(), check_rollback_index);
+            assert_eq!(partial_tree.first_index(), Some(partial_tree_start_index));
+            assert_eq!(full_tree.get_root_at(check_rollback_index).unwrap().to_string(), 
+                        partial_tree.get_root().to_string());
+        }
+
+        partial_tree.rollback(partial_tree_start_index);
+        assert_eq!(partial_tree.next_index(), 0);
+        assert_eq!(partial_tree.first_index(), None);
+        
     }
 
     #[test_case(10, 1, 1)]

@@ -265,7 +265,7 @@ pub fn merkle_get_left_siblings(mut cx: FunctionContext) -> JsResult<JsValue> {
             
             result
         },
-        None => Err(format!("Tree is undefined at index {}", index)) //cx.throw_error(&format!("Tree is undefined at index {}", index))
+        None => Err(format!("Tree is undefined at index {}", index))
     };
 
     match array {

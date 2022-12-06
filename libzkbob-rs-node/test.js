@@ -15,7 +15,6 @@ console.log('Getting siblings...')
 try {
     let siblings = tree.getLeftSiblings(384);
     console.log(siblings);
-    console.log('Node = ', tree.getNode(7, 2));
 } catch(err) {
     console.error(`Cannot get siblings: ${err}`);
 }

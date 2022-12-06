@@ -378,6 +378,11 @@ impl UserAccount {
         self.inner.borrow().state.tree.next_index()
     }
 
+    #[wasm_bindgen(js_name = "firstTreeIndex")]
+    pub fn first_tree_index(&self) -> Option<u64> {
+        self.inner.borrow().state.tree.first_index()
+    }
+
     // TODO: Temporary method, try to expose the whole tree
     #[wasm_bindgen(js_name = "getLastLeaf")]
     pub fn get_last_leaf(&self) -> String {
