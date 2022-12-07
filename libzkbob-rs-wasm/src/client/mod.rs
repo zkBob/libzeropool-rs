@@ -523,4 +523,14 @@ impl UserAccount {
 
         serde_wasm_bindgen::to_value(&data).unwrap()
     }
+
+    #[wasm_bindgen(js_name = "rollbackState")]
+    pub fn rollback_state(&self, rollback_index: u64) -> u64 {
+        self.inner.borrow_mut().state.rollback(rollback_index)
+    }
+
+    #[wasm_bindgen(js_name = "wipeState")]
+    pub fn wipe_state(&self) {
+        self.inner.borrow_mut().state.wipe();
+    }
 }

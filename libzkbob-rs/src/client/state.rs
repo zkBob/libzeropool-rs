@@ -257,4 +257,44 @@ where
 
         note_balance
     }
+
+    // rollback current state, return updated next_index
+    pub fn rollback(&mut self, rollback_index: u64) -> u64 {
+        if rollback_index > self.tree.next_index() {
+            return self.tree.next_index();
+        }
+
+        let rollback_index = rollback_index & ((1 << constants::OUTPLUSONELOG) - 1);
+        self.txs.remove_from(rollback_index);
+        for (index, tx) in self.txs.iter() {
+            match tx {
+                Transaction::Account(acc) => {
+                    if index >= self.latest_account_index.unwrap_or(0) {
+                        self.latest_account_index = Some(index);
+                        self.latest_account = Some(acc);
+                    }
+                }
+                Transaction::Note(_) => {
+                    if index >= self.latest_note_index {
+                        self.latest_note_index = index;
+                    }
+                }
+            }
+        }
+
+        if self.tree.rollback(rollback_index).is_none() {
+            self.wipe();
+        }
+
+        self.tree.next_index()
+    }
+
+    pub fn wipe(&mut self) {
+        self.txs.remove_all();
+        self.latest_account_index = None;
+        self.latest_account = None;
+        self.latest_note_index = 0;
+
+    }
+
 }
