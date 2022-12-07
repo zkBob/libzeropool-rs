@@ -266,6 +266,8 @@ where
 
         let rollback_index = rollback_index & ((1 << constants::OUTPLUSONELOG) - 1);
         self.txs.remove_from(rollback_index);
+        self.latest_account = None;
+        self.latest_account_index = None;
         self.latest_note_index = 0;
         for (index, tx) in self.txs.iter() {
             match tx {
