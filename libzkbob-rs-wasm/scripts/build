@@ -11,7 +11,7 @@ then
 fi
 
 function patch_package_json () {
-  sed -i.bak -E "s/\"name\": \"libzeropool-rs-wasm\"/\"name\": \"libzeropool-rs-wasm-$1\"/g" $PARENT_DIR/$1/package.json
+  sed -i.bak -E "s/\"name\": \"libzkbob-rs-wasm\"/\"name\": \"libzkbob-rs-wasm-$1\"/g" $PARENT_DIR/$1/package.json
   jq '.files |= . + ["snippets"]' $PARENT_DIR/$1/package.json > $PARENT_DIR/$1/tmp.json \
     && mv $PARENT_DIR/$1/tmp.json $PARENT_DIR/$1/package.json
 }
