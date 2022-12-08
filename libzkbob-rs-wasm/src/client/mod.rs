@@ -533,4 +533,14 @@ impl UserAccount {
     pub fn wipe_state(&self) {
         self.inner.borrow_mut().state.wipe();
     }
+
+    #[wasm_bindgen(js_name = "treeGetStableIndex")]
+    pub fn tree_get_stable_index(&self) -> u64 {
+        self.inner.borrow_mut().state.tree.get_last_stable_index()
+    }
+
+    #[wasm_bindgen(js_name = "treeSetStableIndex")]
+    pub fn tree_set_stable_index(&self, stable_index: u64) {
+        self.inner.borrow_mut().state.tree.set_last_stable_index(Some(stable_index));
+    }
 }

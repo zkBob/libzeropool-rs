@@ -927,6 +927,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         let new_root = self.get_node_full_batched(constants::HEIGHT as u32, 0, &mut update_batch, new_next_index);
         self.db.write(update_batch).unwrap();
 
+        if self.next_index() < self.get_last_stable_index() {
+            self.set_last_stable_index(None);
+        }
+
         new_root
     }
 
@@ -1022,6 +1026,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         self.next_index = 0;
         self.write_index_to_database(FIRST_INDEX_KEY, None);
         self.write_index_to_database(NEXT_INDEX_KEY, Some(self.next_index));
+        self.set_last_stable_index(None);
     }
 
     pub fn get_all_nodes(&self) -> Vec<Node<P::Fr>> {
@@ -1050,6 +1055,17 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     pub fn next_index(&self) -> u64 {
         self.next_index
+    }
+
+    pub fn get_last_stable_index(&self) -> u64 {
+        match self.get_named_index_opt("stable_index") {
+            Some(val) => val,
+            _ => 0,
+        }
+    }
+
+    pub fn set_last_stable_index(&mut self, value: Option<u64>) {
+        self.set_named_index("stable_index", value);
     }
 
     fn update_first_index(&mut self, first_index: Option<u64>) -> bool {
@@ -1223,6 +1239,15 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             Ok(Some(ref val)) => Some((&val[..]).read_u64::<BigEndian>().unwrap()),
             _ => None,
         }
+    }
+
+    fn set_named_index(&mut self, key: &str, value: Option<u64>) {
+        let mut batch = self.db.transaction();
+        match value {
+            Some(val) => batch.put(DbCols::NamedIndex as u32, key.as_bytes(), &val.to_be_bytes()),
+            None => batch.delete(DbCols::NamedIndex as u32, key.as_bytes())
+        }
+        self.db.write(batch).unwrap();
     }
 
     fn set_named_index_batched(&mut self, batch: &mut DBTransaction, key: &str, value: u64) {
@@ -2162,5 +2187,19 @@ mod tests {
         assert_eq!(tree.first_index(), None);
         assert_eq!(tree.next_index(), 0);
         assert_eq!(tree.get_leaves().len(), 0);
+    }
+
+   
+    #[test]
+    fn test_stable_index() {
+        let mut tree = MerkleTree::new(create(3), POOL_PARAMS.clone());
+
+        assert_eq!(tree.get_last_stable_index(), 0);
+
+        tree.set_last_stable_index(Some(1024));
+        assert_eq!(tree.get_last_stable_index(), 1024);
+
+        tree.set_last_stable_index(None);
+        assert_eq!(tree.get_last_stable_index(), 0);
     }
 }

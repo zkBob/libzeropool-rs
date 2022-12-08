@@ -148,9 +148,9 @@ pub fn merkle_get_node(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn merkle_get_next_index(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tree = cx.argument::<BoxedMerkleTree>(0)?;
 
-    let root = tree.read().unwrap().inner.next_index();
+    let next_index = tree.read().unwrap().inner.next_index();
 
-    let result = neon_serde::to_value(&mut cx, &root).unwrap();
+    let result = neon_serde::to_value(&mut cx, &next_index).unwrap();
 
     Ok(result)
 }
@@ -209,7 +209,7 @@ pub fn merkle_get_virtual_node(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(result)
 }
 
-pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tree = cx.argument::<BoxedMerkleTree>(0)?;
     let rollback_index = {
         let num = cx.argument::<JsNumber>(1)?;
@@ -217,7 +217,17 @@ pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     };
 
     let mut a = tree.write().unwrap();
-    a.inner.rollback(rollback_index);
+    let new_next_index = a.inner.rollback(rollback_index);
+
+    let result = neon_serde::to_value(&mut cx, &new_next_index).unwrap();
+
+    Ok(result)
+}
+
+pub fn merkle_wipe(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    tree.write().unwrap().inner.wipe();
 
     Ok(cx.undefined())
 }
@@ -271,4 +281,26 @@ pub fn merkle_get_left_siblings(mut cx: FunctionContext) -> JsResult<JsValue> {
         Ok(val) => Ok(neon_serde::to_value(&mut cx, &val).unwrap()),
         Err(e) => cx.throw_error(e),
     }
+}
+
+pub fn merkle_get_last_stable_index(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    let stable_index = tree.read().unwrap().inner.get_last_stable_index();
+
+    let result = neon_serde::to_value(&mut cx, &stable_index).unwrap();
+
+    Ok(result)
+}
+
+pub fn merkle_set_last_stable_index(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+    let stable_index = {    
+        let num = cx.argument::<JsNumber>(1)?;
+        num.value(&mut cx) as u64
+    };
+
+    tree.write().unwrap().inner.set_last_stable_index(Some(stable_index));
+
+    Ok(cx.undefined())
 }
