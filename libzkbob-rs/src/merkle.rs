@@ -167,7 +167,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         let mut batch = self.db.transaction();
 
         // add leaf
-        let temporary_leaves_count = if temporary { 1 } else { 0 };
+        let temporary_leaves_count = u64::from(temporary);
         self.set_batched(&mut batch, height, index, hash, temporary_leaves_count);
 
         // update inner nodes
@@ -249,7 +249,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
         // append sibling nodes
         virtual_nodes.extend(siblings
-            .unwrap_or(vec![])
+            .unwrap_or_default()
             .into_iter()
             .map(|node| {
                 first_bound_index = first_bound_index.min(node.index << node.height);
@@ -420,7 +420,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
                 //println!("");
 
-                return Some(hash)
+                Some(hash)
             }
         }
     }
@@ -449,7 +449,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             return None;
         }
 
-        return self.get_with_next_index_recursive(constants::HEIGHT as u32, 0, index)
+        self.get_with_next_index_recursive(constants::HEIGHT as u32, 0, index)
     }
 
     pub fn get_root_after_virtual<I>(
@@ -972,8 +972,10 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
                         right_index,
                     );
 
-                    if left_child.is_some() && right_child.is_some() {
-                        let pair = [left_child.unwrap(), right_child.unwrap()];
+                    if let (Some(left_child), Some(right_child)) = 
+                        (left_child, right_child)
+                    {
+                        let pair = [left_child, right_child];
                         let hash = poseidon(pair.as_ref(), self.params.compress());
 
                         //print!("🧮[{}.{}]={}.{}+{}.{}  ", height, index, height - 1, index << 1, height - 1, (index << 1) + 1);
@@ -1065,11 +1067,11 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     // remove value by specified key in case of index is None
     fn write_index_to_database(&mut self, index_db_key: &[u8], index: Option<u64>) {
         let mut transaction = self.db.transaction();
-        if index.is_some() {
+        if let Some(index) = index {
             let mut data = [0u8; 8];
             {
                 let mut bytes = &mut data[..];
-                let _ = bytes.write_u64::<BigEndian>(index.unwrap());
+                let _ = bytes.write_u64::<BigEndian>(index);
             }
             transaction.put(DbCols::NextIndex as u32, index_db_key, &data);
         } else {

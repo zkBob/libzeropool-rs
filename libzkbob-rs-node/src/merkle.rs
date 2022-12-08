@@ -11,7 +11,6 @@ use libzkbob_rs::merkle::NativeMerkleTree;
 use neon::prelude::*;
 use neon::types::buffer::TypedArray;
 //use serde::Serialize;
-use hex;
 
 use crate::PoolParams;
 

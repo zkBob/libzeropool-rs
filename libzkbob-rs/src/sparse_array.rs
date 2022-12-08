@@ -205,7 +205,7 @@ mod tests {
         a.set(100, &6);
         
         a.remove_from(10);
-        assert_eq!(a.iter_slice(0..=100).count(), 3);
+        assert_eq!(a.iter_slice(0..=100).count(), 2);
 
         a.remove_all();
         assert_eq!(a.iter_slice(0..=100).count(), 0);
