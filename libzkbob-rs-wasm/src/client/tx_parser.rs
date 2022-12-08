@@ -3,6 +3,9 @@ use libzeropool::{native::{account::Account, note::Note, cipher, key}, fawkes_cr
 use libzkbob_rs::{merkle::Hash, keys::Keys};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
+use std::iter::IntoIterator;
+
+#[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
 use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS};
@@ -62,7 +65,7 @@ impl TxParser {
         let eta = Keys::derive(sk, params).eta;
 
         let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
-        let parse_results: Vec<_> = txs.into_par_iter().map(|tx| -> ParseResult {
+        let parse_results: Vec<_> = TxParser::into_iter(txs).map(|tx| -> ParseResult {
             let IndexedTx{index, memo, commitment} = tx;
             let memo = hex::decode(memo).unwrap();
             let commitment = hex::decode(commitment).unwrap();
@@ -166,5 +169,17 @@ impl TxParser {
             .unwrap()
             .unchecked_into::<ParseTxsResult>();
         Ok(parse_result)
+    }
+
+    // Multi-threaded implementation.
+    #[cfg(feature = "multicore")]
+    fn into_iter(col: Vec<IndexedTx>) -> rayon::vec::IntoIter<IndexedTx> {
+        col.into_par_iter()
+    }
+
+    // Single-threaded implementation.
+    #[cfg(not(feature = "multicore"))]
+    fn into_iter(col: Vec<IndexedTx>) -> <Vec<IndexedTx> as IntoIterator>::IntoIter {
+        col.into_iter()
     }
 }
