@@ -264,7 +264,7 @@ where
             return self.tree.next_index();
         }
 
-        let rollback_index = rollback_index & ((1 << constants::OUTPLUSONELOG) - 1);
+        let rollback_index = (rollback_index >> constants::OUTPLUSONELOG) << constants::OUTPLUSONELOG;
         self.txs.remove_from(rollback_index);
         self.latest_account = None;
         self.latest_account_index = None;
@@ -293,11 +293,12 @@ where
     }
 
     pub fn wipe(&mut self) {
+        self.tree.wipe();
+
         self.txs.remove_all();
         self.latest_account_index = None;
         self.latest_account = None;
         self.latest_note_index = 0;
-
     }
 
 }

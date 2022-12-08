@@ -125,7 +125,12 @@ where
 
     pub fn remove_all(&self) {
         let mut batch = self.db.transaction();
-        batch.delete_prefix(0, &[]);
+        //batch.delete_prefix(0, &[][..]);
+        self.db
+            .iter(0)
+            .for_each(|(key, _)| {
+                batch.delete(0 as u32, &key); 
+            });
         self.db.write(batch).unwrap();
     }
 

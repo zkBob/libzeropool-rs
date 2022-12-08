@@ -996,9 +996,26 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     }
 
     pub fn wipe(&mut self) {
-        let mut wipe_batch = self.db.transaction();        
-        wipe_batch.delete_prefix(DbCols::Leaves as u32, &[]);
-        wipe_batch.delete_prefix(DbCols::TempLeaves as u32, &[]);
+        let mut wipe_batch = self.db.transaction();   
+        
+        // ???: It works fine in the local tests,
+        // but has no effect within kvdb-web for unknown reason
+        //wipe_batch.delete_prefix(DbCols::Leaves as u32, &[][..]);
+        //wipe_batch.delete_prefix(DbCols::TempLeaves as u32, &[][..]);
+
+        self.db
+            .iter(DbCols::Leaves as u32)
+            .for_each(|(key, _)| {
+                wipe_batch.delete(DbCols::Leaves as u32, &key); 
+            });
+
+        self.db
+            .iter(DbCols::TempLeaves as u32)
+            .for_each(|(key, _)| {
+                wipe_batch.delete(DbCols::TempLeaves as u32, &key); 
+            });
+
+
         self.db.write(wipe_batch).unwrap();
 
         self.first_index = None;
