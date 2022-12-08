@@ -1,42 +1,49 @@
 #!/usr/bin/env bash
 
+set -e
+
 PARENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
 
-function build () {
-  DIR=$3
-  wasm-pack build --release --target $1 -d $DIR -- --features $1 --features $2
-  # Optimize the binary, since wasm-pack refuses to see wasm-opt
-  wasm-opt -o $PARENT_DIR/$DIR/wasm-opt.wasm -O3 --debuginfo $PARENT_DIR/$DIR/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$DIR/wasm-opt.wasm $PARENT_DIR/$DIR/libzkbob_rs_wasm_bg.wasm
-  # Patch typings for async methods
-  sed -i.bak -E 's/(createDeposit\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createDepositPermittable\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createTransfer\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createTransferOptimistic\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createWithdraw\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createWithdrawalOptimistic\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  # Remove invalid typings
-<<<<<<< HEAD
-  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
-  
-  rm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
-  
-=======
-  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$DIR/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$DIR/libzkbob_rs_wasm_bg.wasm.d.ts
->>>>>>> 2ae354f... Add multicore/singlecore builds
-  # Patch package.json, since wasm-pack doesn't allow renaming packages
-  sed -i.bak -E "s/\"name\": \"libzkbob-rs-wasm\"/\"name\": \"libzkbob-rs-wasm-$DIR\"/g" $PARENT_DIR/$DIR/package.json
-  # Add workerHelpers.js in package.json
-  if [ $2 = "multicore" ]
-  then
-    pushd $PARENT_DIR/$DIR > /dev/null
-      echo "`jq --arg WORKER_JS $(find . -name "workerHelpers.js" | sed -e "s/^.\///") '.files[.files| length] |= . + $WORKER_JS' package.json`" > package.json
-    popd > /dev/null
-  fi
+if ! command -v jq &> /dev/null
+then
+    echo "jq is required to run this script: https://stedolan.github.io/jq/"
+    exit
+fi
+
+function patch_package_json () {
+  sed -i.bak -E "s/\"name\": \"libzeropool-rs-wasm\"/\"name\": \"libzeropool-rs-wasm-$1\"/g" $PARENT_DIR/$1/package.json
+  jq '.files |= . + ["snippets"]' $PARENT_DIR/$1/package.json > $PARENT_DIR/$1/tmp.json \
+    && mv $PARENT_DIR/$1/tmp.json $PARENT_DIR/$1/package.json
 }
 
-build web "" web
-build web multicore web-multicore
-#build bundler
-#build nodejs
+# build $name $features $is_mt
+function build () {
+  if [ "$3" = true ] ; then	
+    RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' \
+      rustup run nightly \
+      wasm-pack build --release --target web -d $1 \
+      -- --features $2 -Z build-std=panic_abort,std	
+  else	
+    wasm-pack build --release --target web -d $1 -- --features $2	
+  fi
+
+  # Optimize the binary, since wasm-pack refuses to see wasm-opt
+  if [ "$4" = debug ] ; then
+    wasm-opt -o $PARENT_DIR/$1/wasm-opt.wasm --debuginfo -O3 $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$1/wasm-opt.wasm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm
+  else
+    wasm-opt -o $PARENT_DIR/$1/wasm-opt.wasm -O3 $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$1/wasm-opt.wasm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm
+  fi
+
+  # Remove invalid typings
+  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
+  sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
+  rm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
+  
+  # Patch package.json, since wasm-pack doesn't allow renaming packages
+  patch_package_json $1
+}
+
+build web web false
+build web-mt web,multicore true
+build web-debug web false debug
+build web-mt-debug web,multicore true debug
