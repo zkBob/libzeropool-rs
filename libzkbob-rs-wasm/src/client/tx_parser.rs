@@ -8,7 +8,7 @@ use std::iter::IntoIterator;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS};
+use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter};
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StateUpdate {
@@ -65,7 +65,7 @@ impl TxParser {
         let eta = Keys::derive(sk, params).eta;
 
         let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
-        let parse_results: Vec<_> = TxParser::into_iter(txs).map(|tx| -> ParseResult {
+        let parse_results: Vec<_> = vec_into_iter(txs).map(|tx| -> ParseResult {
             let IndexedTx{index, memo, commitment} = tx;
             let memo = hex::decode(memo).unwrap();
             let commitment = hex::decode(commitment).unwrap();
@@ -169,17 +169,5 @@ impl TxParser {
             .unwrap()
             .unchecked_into::<ParseTxsResult>();
         Ok(parse_result)
-    }
-
-    // Multi-threaded implementation.
-    #[cfg(feature = "multicore")]
-    fn into_iter(col: Vec<IndexedTx>) -> rayon::vec::IntoIter<IndexedTx> {
-        col.into_par_iter()
-    }
-
-    // Single-threaded implementation.
-    #[cfg(not(feature = "multicore"))]
-    fn into_iter(col: Vec<IndexedTx>) -> <Vec<IndexedTx> as IntoIterator>::IntoIter {
-        col.into_iter()
     }
 }
