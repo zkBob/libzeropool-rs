@@ -18,22 +18,3 @@ pub struct BulkData {
     pub root_after: Num<Fr>,
     pub txs: Vec<TxInputData>,
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BulkInfo {
-    pub index_from: u64,
-    pub next_index: u64,
-    pub filename: String,
-    pub bytes: usize,
-    pub tx_count: usize,
-    pub timestamp: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ColdStorageConfig {
-    pub network: String,
-    pub index_from: u64,
-    pub next_index: u64,
-    pub total_txs_count: usize,
-    pub bulks: Vec<BulkInfo>,
-}
