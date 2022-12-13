@@ -3,9 +3,12 @@ use libzeropool::{native::{account::Account, note::Note, cipher, key}, fawkes_cr
 use libzkbob_rs::{merkle::Hash, keys::Keys};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
+use std::iter::IntoIterator;
+
+#[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS};
+use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter};
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StateUpdate {
@@ -71,7 +74,7 @@ impl TxParser {
         let eta = Keys::derive(sk, params).eta;
 
         let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
-        let parse_results: Vec<_> = txs.into_par_iter().map(|tx| -> ParseResult {
+        let parse_results: Vec<_> = vec_into_iter(txs).map(|tx| -> ParseResult {
             let IndexedTx{index, memo, commitment} = tx;
             let memo = hex::decode(memo).unwrap();
             let commitment = hex::decode(commitment).unwrap();
