@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
+use rayon::prelude::*;
+
 
 use js_sys::{Array, Promise};
 use libzeropool::{
@@ -22,9 +24,10 @@ use libzkbob_rs::{
     merkle::{Hash, Node}
 };
 use serde::{Serialize};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
+use crate::ParseTxsColdStorageResult;
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -34,11 +37,14 @@ use crate::{
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, MerkleProof, Pair, PoolParams, Transaction, UserState, POOL_PARAMS,
 };
+use tx_types::JsTxType;
+use crate::client::coldstorage::{ BulkData };
+use crate::client::tx_parser::{ ParseResult, ParseColdStorageResult };
 
 mod tx_types;
-use tx_types::JsTxType;
-
+mod coldstorage;
 mod tx_parser;
+
 
 // TODO: Find a way to expose MerkleTree,
 
@@ -302,6 +308,10 @@ impl UserAccount {
     pub fn update_state(&mut self, state_update: &JsValue) -> Result<(), JsValue> {
         let state_update: StateUpdate = state_update.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         
+        Ok(self.update_state_internal(state_update))
+    }
+
+    fn update_state_internal(&mut self, state_update: StateUpdate) -> () {
         if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
             self.inner.borrow_mut().state.tree.add_leafs_and_commitments(state_update.new_leafs, state_update.new_commitments);
         }
@@ -316,7 +326,97 @@ impl UserAccount {
             });
         });
 
-        Ok(())
+        ()
+    }
+
+    
+    #[wasm_bindgen(js_name = "updateStateColdStorage")]
+    pub fn update_state_cold_storage(
+        &mut self,
+        bulks: Vec<js_sys::Uint8Array>,
+        from_index: Option<u64>,    // inclusively
+        to_index: Option<u64>,      // exclusively
+    ) -> Result<ParseTxsColdStorageResult, JsValue> {
+        const MAX_SUPPORTED_BULK_VERSION: u8 = 1;
+
+        let mut total_txs_cnt: usize = 0;
+        let bulks_obj: Result<Vec<BulkData>, JsValue> = bulks.into_iter().map(|array| {
+            let bulk_data = array.to_vec();
+            let bulk: BulkData = match bincode::deserialize(&bulk_data) {
+                Ok(res) => res,
+                Err(e) => return Err(js_err!(&format!("Cannot parse bulk data: {}", e))),
+            };
+
+            if bulk.bulk_version > MAX_SUPPORTED_BULK_VERSION {
+                return Err(js_err!(&format!("Incorrect bluk vesion {}, supported {}", bulk.bulk_version, MAX_SUPPORTED_BULK_VERSION)))
+            }
+
+            Ok(bulk)
+        })
+        .collect();
+
+        if let Err(e) = bulks_obj {
+            return Err(e);
+        }
+
+
+        let mut single_result: ParseResult = bulks_obj
+            .unwrap()
+            .into_iter()
+            .map(|bulk| -> Vec<ParseResult> {
+                let eta = &self.inner.borrow().keys.eta;
+                let params = &self.inner.borrow().params;
+                let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
+                let bulk_results: Vec<ParseResult> = bulk.txs
+                    .into_par_iter()
+                    .filter(|tx| range.contains(&tx.index))
+                    .map(|tx| -> ParseResult {
+                        tx_parser::parse_tx(
+                            tx.index,
+                            &tx.commitment,
+                            &tx.memo,
+                            Some(&tx.tx_hash),
+                            eta,
+                            params
+                        )
+                    })
+                    .collect();
+                
+                total_txs_cnt = total_txs_cnt + bulk_results.len();
+
+                bulk_results
+            })
+            .flatten()
+            .fold(Default::default(), |acc: ParseResult, parse_result| {
+                ParseResult {
+                    decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
+                    state_update: StateUpdate {
+                        new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
+                        new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
+                        new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
+                        new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
+                    }
+                }
+            });
+
+        let decrypted_leafs_cnt: usize = single_result.state_update.new_leafs.len();
+
+        self.update_state_internal(single_result.state_update);
+
+        
+        single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
+        
+        let sync_result = ParseColdStorageResult {
+            decrypted_memos: single_result.decrypted_memos,
+            tx_cnt: total_txs_cnt,
+            decrypted_leafs_cnt: decrypted_leafs_cnt,
+        };
+
+        let sync_result = serde_wasm_bindgen::to_value(&sync_result)
+            .unwrap()
+            .unchecked_into::<ParseTxsColdStorageResult>();
+
+        Ok(sync_result)
     }
 
     #[wasm_bindgen(js_name = "getRoot")]

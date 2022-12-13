@@ -151,6 +151,12 @@ export interface ParseTxsResult {
     stateUpdate: StateUpdate;
 }
 
+export interface ParseTxsColdStorageResult {
+    decryptedMemos: DecryptedMemo[];
+    txCnt: number;
+    decryptedLeafsCnt: number;
+}
+
 "#;
 
 #[wasm_bindgen]
@@ -239,6 +245,9 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "IWithdrawData[]")]
     pub type IMultiWithdrawData;
 
+    #[wasm_bindgen(typescript_type = "DecryptedMemo")]
+    pub type DecryptedMemo;
+
     #[wasm_bindgen(typescript_type = "DecryptedMemo[]")]
     pub type DecryptedMemos;
 
@@ -247,6 +256,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "ParseTxsResult")]
     pub type ParseTxsResult;
+
+    #[wasm_bindgen(typescript_type = "ParseTxsColdStorageResult")]
+    pub type ParseTxsColdStorageResult;
 }
 
 #[derive(Serialize, Deserialize, Clone)]
