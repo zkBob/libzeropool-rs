@@ -82,7 +82,7 @@ impl TxParser {
             parse_tx(index, &commitment, &memo, None, &eta, params)
         }).collect();
 
-        let mut parse_result = parse_results
+        let parse_result = parse_results
             .into_iter()
             .fold(Default::default(), |acc: ParseResult, parse_result| {
                 ParseResult {
@@ -95,8 +95,6 @@ impl TxParser {
                     }
                 }
         });
-
-        parse_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
 
         let parse_result = serde_wasm_bindgen::to_value(&parse_result)
             .unwrap()
@@ -120,7 +118,7 @@ pub fn parse_tx(
         .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))))
         .collect();
     
-    let pair = cipher::decrypt_out(*eta, &memo.clone(), params);
+    let pair = cipher::decrypt_out(*eta, &memo, params);
 
     match pair {
         Some((account, notes)) => {        
@@ -140,7 +138,7 @@ pub fn parse_tx(
                 decrypted_memos: vec![ DecMemo {
                     index,
                     acc: Some(account),
-                    in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                    in_notes: in_notes.iter().map(|(index, note)| IndexedNote{index: *index, note: *note}).collect(), 
                     out_notes: out_notes.into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
                     tx_hash: match tx_hash {
                         Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
@@ -175,7 +173,7 @@ pub fn parse_tx(
                 ParseResult {
                     decrypted_memos: vec![ DecMemo{
                         index, 
-                        in_notes: in_notes.clone().into_iter().map(|(index, note)| IndexedNote{index, note}).collect(), 
+                        in_notes: in_notes.iter().map(|(index, note)| IndexedNote{index: *index, note: *note}).collect(), 
                         tx_hash: match tx_hash {
                             Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
                             None        => None,
