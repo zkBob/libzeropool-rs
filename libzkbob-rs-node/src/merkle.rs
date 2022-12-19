@@ -249,20 +249,13 @@ pub fn merkle_get_left_siblings(mut cx: FunctionContext) -> JsResult<JsValue> {
             let result: Result<Vec<String>, String> = val
                 .into_iter()
                 .map(|node| {
-                    let height = format!("{:#04x}", node.height);
-                    let index = format!("{:#014x}", node.index);
-
                     let mut node_bytes = vec![];
                     node.value.serialize(&mut node_bytes).unwrap();
                     node_bytes.reverse();
                     let node_string = hex::encode(node_bytes);
 
 
-                    let res = format!("{}{}{}",
-                        height.strip_prefix("0x").unwrap_or(&height),
-                        index.strip_prefix("0x").unwrap_or(&index),
-                        node_string
-                    );
+                    let res = format!("{:02x}{:012x}{}", node.height, node.index, node_string);
 
                     if res.len() != 78 {
                         return Err(format!("Internal error (sibling length {} is invalid)", res.len()));
