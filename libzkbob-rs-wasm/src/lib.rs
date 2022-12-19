@@ -64,6 +64,7 @@ impl SerConstants {
     }
 }
 
+#[cfg(feature = "multicore")]
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 #[wasm_bindgen(js_name = "getConstants")]

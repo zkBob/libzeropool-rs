@@ -1,32 +1,52 @@
 #!/usr/bin/env bash
 
+set -e
+
+RUSTUP_MT_TOOLCHAIN=nightly-2022-12-11
+RUSTUP_ST_TOOLCHAIN=stable-2022-11-03
 PARENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
 
+if ! command -v jq &> /dev/null
+then
+    echo "jq is required to run this script: https://stedolan.github.io/jq/"
+    exit
+fi
+
+function patch_package_json () {
+  sed -i.bak -E "s/\"name\": \"libzkbob-rs-wasm\"/\"name\": \"libzkbob-rs-wasm-$1\"/g" $PARENT_DIR/$1/package.json
+  jq '.files |= . + ["snippets"]' $PARENT_DIR/$1/package.json > $PARENT_DIR/$1/tmp.json \
+    && mv $PARENT_DIR/$1/tmp.json $PARENT_DIR/$1/package.json
+}
+
+# build $name $features $is_mt
 function build () {
-  wasm-pack build --release --target $1 -d $1 -- --features $1
+  if [ "$3" = true ] ; then	
+    RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' \
+      rustup run $RUSTUP_MT_TOOLCHAIN \
+      wasm-pack build --release --target web -d $1 \
+      -- --features $2 -Z build-std=panic_abort,std	
+  else
+    rustup run $RUSTUP_ST_TOOLCHAIN \
+      wasm-pack build --release --target web -d $1 -- --features $2	
+  fi
+
   # Optimize the binary, since wasm-pack refuses to see wasm-opt
-  wasm-opt -o $PARENT_DIR/$1/wasm-opt.wasm -O3 $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$1/wasm-opt.wasm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm
-  # Patch typings for async methods
-  sed -i.bak -E 's/(createDeposit\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createDepositPermittable\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createTransfer\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createTransferOptimistic\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createWithdraw\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
-  sed -i.bak -E 's/(createWithdrawalOptimistic\(.*\)):.*$/\1: Promise<TransactionData>;/g' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
+  if [ "$4" = debug ] ; then
+    wasm-opt -o $PARENT_DIR/$1/wasm-opt.wasm --debuginfo -O3 $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$1/wasm-opt.wasm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm
+  else
+    wasm-opt -o $PARENT_DIR/$1/wasm-opt.wasm -O3 $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm && mv $PARENT_DIR/$1/wasm-opt.wasm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm
+  fi
+
   # Remove invalid typings
   sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm.d.ts
   sed -i.bak -E '/BroccoliDestroyInstance/d' $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
-  
   rm $PARENT_DIR/$1/libzkbob_rs_wasm_bg.wasm.d.ts
   
   # Patch package.json, since wasm-pack doesn't allow renaming packages
-  sed -i.bak -E "s/\"name\": \"libzkbob-rs-wasm\"/\"name\": \"libzkbob-rs-wasm-$1\"/g" $PARENT_DIR/$1/package.json
-  # Add workerHelpers.js in package.json
-  pushd $PARENT_DIR/$1 > /dev/null
-    echo "`jq --arg WORKER_JS $(find . -name "workerHelpers.js" | sed -e "s/^.\///") '.files[.files| length] |= . + $WORKER_JS' package.json`" > package.json
-  popd > /dev/null
+  patch_package_json $1
 }
 
-build web
-#build bundler
-#build nodejs
+build web web false
+build web-mt web,multicore true
+build web-debug web false debug
+build web-mt-debug web,multicore true debug
