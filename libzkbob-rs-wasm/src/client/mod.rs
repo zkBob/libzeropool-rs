@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
-use rayon::prelude::*;
 
+#[cfg(feature = "multicore")]
+use rayon::prelude::*;
 
 use js_sys::{Array, Promise};
 use libzeropool::{
@@ -31,6 +32,7 @@ use crate::ParseTxsColdStorageResult;
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
+use crate::helpers::vec_into_iter;
 use crate::ts_types::Hash as JsHash;
 use crate::{
     keys::reduce_sk, Account, Fr, Fs, Hashes, 
@@ -367,8 +369,7 @@ impl UserAccount {
                 let eta = &self.inner.borrow().keys.eta;
                 let params = &self.inner.borrow().params;
                 let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
-                let bulk_results: Vec<ParseResult> = bulk.txs
-                    .into_par_iter()
+                let bulk_results: Vec<ParseResult> = vec_into_iter(bulk.txs)
                     .filter(|tx| range.contains(&tx.index))
                     .map(|tx| -> ParseResult {
                         tx_parser::parse_tx(
