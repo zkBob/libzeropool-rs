@@ -37,7 +37,8 @@ use crate::ts_types::Hash as JsHash;
 use crate::{
     keys::reduce_sk, Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
-    IndexedNote, IndexedNotes, MerkleProof, Pair, PoolParams, Transaction, UserState, POOL_PARAMS,
+    IndexedNote, IndexedNotes, PoolParams, Transaction, UserState, POOL_PARAMS,
+    MerkleProof, Pair, TreeNode, TreeNodes,
 };
 use tx_types::JsTxType;
 use crate::client::coldstorage::{ BulkData };
@@ -307,15 +308,26 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = "updateState")]
-    pub fn update_state(&mut self, state_update: &JsValue) -> Result<(), JsValue> {
+    pub fn update_state(&mut self, state_update: &JsValue, siblings: Option<TreeNodes>) -> Result<(), JsValue> {
         let state_update: StateUpdate = state_update.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        let siblings: Option<Vec<Node<Fr>>> = match siblings {
+            Some(val) => val.into_serde().map_err(|err| js_err!(&err.to_string()))?,
+            None => None
+        };
         
-        Ok(self.update_state_internal(state_update))
+        Ok(self.update_state_internal(state_update, siblings))
     }
 
-    fn update_state_internal(&mut self, state_update: StateUpdate) -> () {
+    fn update_state_internal(&mut self, state_update: StateUpdate, siblings: Option<Vec<Node<Fr>>>) -> () {
         if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
-            self.inner.borrow_mut().state.tree.add_leafs_and_commitments(state_update.new_leafs, state_update.new_commitments);
+            self.inner.borrow_mut()
+                .state
+                .tree
+                .add_leafs_commitments_and_siblings(
+                    state_update.new_leafs,
+                    state_update.new_commitments,
+                    siblings
+                );
         }
 
         state_update.new_accounts.into_iter().for_each(|(at_index, account)| {
@@ -402,7 +414,7 @@ impl UserAccount {
 
         let decrypted_leafs_cnt: usize = single_result.state_update.new_leafs.len();
 
-        self.update_state_internal(single_result.state_update);
+        self.update_state_internal(single_result.state_update, None);
 
         
         single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
@@ -425,6 +437,15 @@ impl UserAccount {
         let root = self.inner.borrow_mut().state.tree.get_root().to_string();
 
         root
+    }
+
+    #[wasm_bindgen(js_name = "getRootAt")]
+    pub fn get_root_at(&mut self, index: u64) -> Result<String, JsValue> {
+
+        match self.inner.borrow_mut().state.tree.get_root_at(index) {
+            Some(val) => Ok(val.to_string()),
+            None => Err(js_err!(&format!("Tree doesn't contain sufficient data to calculate root at index {}", index)))
+        }
     }
 
     #[wasm_bindgen(js_name = "totalBalance")]
@@ -458,6 +479,11 @@ impl UserAccount {
         self.inner.borrow().state.tree.next_index()
     }
 
+    #[wasm_bindgen(js_name = "firstTreeIndex")]
+    pub fn first_tree_index(&self) -> Option<u64> {
+        self.inner.borrow().state.tree.first_index()
+    }
+
     // TODO: Temporary method, try to expose the whole tree
     #[wasm_bindgen(js_name = "getLastLeaf")]
     pub fn get_last_leaf(&self) -> String {
@@ -469,6 +495,39 @@ impl UserAccount {
         let node = self.inner.borrow().state.tree.get(height, index);
 
         node.to_string()
+    }
+
+    #[wasm_bindgen(js_name = "getLeftSiblings")]
+    pub fn get_left_siblings(&self, index: u64) -> Result<Vec<TreeNode>, JsValue> {
+        if index & constants::OUTPLUSONELOG as u64 != 0 {
+            return Err(js_err!(&format!("Index to creating sibling from should be multiple of {}", constants::OUT + 1)));
+        }
+
+        let siblings = self
+            .inner
+            .borrow()
+            .state
+            .tree
+            .get_left_siblings(index);
+
+        
+        match siblings {
+            Some(val) => {
+                let result = val
+                    .into_iter()
+                    .map(|node| {
+                        serde_wasm_bindgen::to_value(&node)
+                            .unwrap()
+                            .unchecked_into::<TreeNode>()
+                    })
+                    .collect();
+                
+                Ok(result)
+            },
+            None => Err(js_err!(&format!("Tree is undefined at index {}", index)))
+        }
+        
+            
     }
 
     #[wasm_bindgen(js_name = "getMerkleProof")]
@@ -564,5 +623,25 @@ impl UserAccount {
         let data = WholeState { nodes, txs };
 
         serde_wasm_bindgen::to_value(&data).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = "rollbackState")]
+    pub fn rollback_state(&self, rollback_index: u64) -> u64 {
+        self.inner.borrow_mut().state.rollback(rollback_index)
+    }
+
+    #[wasm_bindgen(js_name = "wipeState")]
+    pub fn wipe_state(&self) {
+        self.inner.borrow_mut().state.wipe();
+    }
+
+    #[wasm_bindgen(js_name = "treeGetStableIndex")]
+    pub fn tree_get_stable_index(&self) -> u64 {
+        self.inner.borrow_mut().state.tree.get_last_stable_index()
+    }
+
+    #[wasm_bindgen(js_name = "treeSetStableIndex")]
+    pub fn tree_set_stable_index(&self, stable_index: u64) {
+        self.inner.borrow_mut().state.tree.set_last_stable_index(Some(stable_index));
     }
 }

@@ -112,6 +112,28 @@ where
         self.db.write(batch).unwrap();
     }
 
+    pub fn remove_from(&self, from_index: u64) {
+        let mut batch = self.db.transaction();
+        for (index, _) in self.iter() {
+            if index >= from_index {
+                let key = index.to_be_bytes();
+                batch.delete(0, &key);
+            }
+        }
+        self.db.write(batch).unwrap();
+    }
+
+    pub fn remove_all(&self) {
+        let mut batch = self.db.transaction();
+        //batch.delete_prefix(0, &[][..]);
+        self.db
+            .iter(0)
+            .for_each(|(key, _)| {
+                batch.delete(0 as u32, &key); 
+            });
+        self.db.write(batch).unwrap();
+    }
+
     // FIXME: Crazy inefficient, replace or improve kvdb
     pub fn count(&self) -> usize {
         self.db.iter(0).count()
@@ -175,5 +197,22 @@ mod tests {
         assert_eq!(a.iter_slice(1..=412345).count(), 3, "from 1");
         assert_eq!(a.iter_slice(2..=412345).count(), 2, "from 2");
         assert_eq!(a.iter_slice(2..=412344).count(), 1, "from 2 except last");
+    }
+
+    #[test]
+    fn test_sparse_array_remove() {
+        let a = SparseArray::new_test();
+        a.set(1, &1u32);
+        a.set(3, &2);
+        a.set(10, &3);
+        a.set(20, &4);
+        a.set(25, &5);
+        a.set(100, &6);
+        
+        a.remove_from(10);
+        assert_eq!(a.iter_slice(0..=100).count(), 2);
+
+        a.remove_all();
+        assert_eq!(a.iter_slice(0..=100).count(), 0);
     }
 }
