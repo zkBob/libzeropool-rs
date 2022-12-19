@@ -315,10 +315,10 @@ impl UserAccount {
             None => None
         };
         
-        Ok(self.update_state_internal(state_update))
+        Ok(self.update_state_internal(state_update, siblings))
     }
 
-    fn update_state_internal(&mut self, state_update: StateUpdate) -> () {
+    fn update_state_internal(&mut self, state_update: StateUpdate, siblings: Option<Vec<Node<Fr>>>) -> () {
         if !state_update.new_leafs.is_empty() || !state_update.new_commitments.is_empty() {
             self.inner.borrow_mut()
                 .state
@@ -414,7 +414,7 @@ impl UserAccount {
 
         let decrypted_leafs_cnt: usize = single_result.state_update.new_leafs.len();
 
-        self.update_state_internal(single_result.state_update);
+        self.update_state_internal(single_result.state_update, None);
 
         
         single_result.decrypted_memos.sort_by(|a,b| a.index.cmp(&b.index));
