@@ -112,11 +112,10 @@ pub fn parse_tx(
     params: &PoolParams
 ) -> ParseResult {
     let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
-    let hashes: Vec<_> = (&memo[4..])
+    let hashes = (&memo[4..])
         .chunks(32)
         .take(num_hashes as usize)
-        .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))))
-        .collect();
+        .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))));
     
     let pair = cipher::decrypt_out(*eta, &memo, params);
 
@@ -147,7 +146,7 @@ pub fn parse_tx(
                     ..Default::default()
                 }],
                 state_update: StateUpdate {
-                    new_leafs: vec![(index, hashes)],
+                    new_leafs: vec![(index, hashes.collect())],
                     new_accounts: vec![(index, account)],
                     new_notes: vec![in_notes],
                     ..Default::default()
@@ -181,7 +180,7 @@ pub fn parse_tx(
                         ..Default::default()
                     }],
                     state_update: StateUpdate {
-                        new_leafs: vec![(index, hashes)],
+                        new_leafs: vec![(index, hashes.collect())],
                         new_notes: vec![in_notes],
                         ..Default::default()
                     }
