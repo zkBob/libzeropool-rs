@@ -297,3 +297,17 @@ pub fn merkle_set_last_stable_index(mut cx: FunctionContext) -> JsResult<JsUndef
 
     Ok(cx.undefined())
 }
+
+pub fn merkle_get_root_at(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    let index = {
+        let num = cx.argument::<JsNumber>(1)?;
+        num.value(&mut cx) as u64
+    };
+
+    let root = tree.read().unwrap().inner.get_root_at(index);
+    let result = neon_serde::to_value(&mut cx, &root).unwrap();
+
+    Ok(result)
+}

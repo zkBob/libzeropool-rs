@@ -77,6 +77,10 @@ class MerkleTree {
     setLastStableIndex(index) {
         zp.merkleSetLastStableIndex(this.inner, index)
     };
+
+    getRootAt(index) {
+        return zp.merkleGetRootAt(this.inner, index)
+    }
 }
 
 class TxStorage {

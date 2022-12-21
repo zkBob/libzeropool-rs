@@ -29,6 +29,7 @@ declare class MerkleTree {
     getLeftSiblings(index: number): string[];
     getLastStableIndex(): number;
     setLastStableIndex(index: number): void;
+    getRootAt(index: number): string;
 }
 
 declare class TxStorage {
