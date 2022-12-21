@@ -439,7 +439,7 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     // Get root at specified index (without rollback)
     // This method can be used for tree integrity check
-    // index is a possition within Merkle tree level 0
+    // index is a position within Merkle tree level 0
     // and should point to the first transaction leaf
     //  (to be a multiple of constants::OUT + 1)
     pub fn get_root_at(&self, index: u64) -> Option<Hash<P::Fr>> {
