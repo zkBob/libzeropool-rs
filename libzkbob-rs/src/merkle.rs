@@ -452,6 +452,37 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         self.get_with_next_index_recursive(constants::HEIGHT as u32, 0, index)
     }
 
+    pub fn get_root_at_iter(&self, index: u64) -> Option<Hash<P::Fr>> {
+        if index > self.next_index() {
+            return None;
+        }
+
+        if index == 0 {
+            return Some(self.default_hashes[constants::HEIGHT as usize]);
+        }
+
+        let non_zero_sibling_height = index.trailing_zeros() as usize;
+        let mut hash = self.default_hashes[non_zero_sibling_height];
+
+        for height in non_zero_sibling_height..constants::HEIGHT {
+            let node_index = index >> height;
+
+            let sibling_index = node_index ^ 1;
+            let is_right = sibling_index & 1 != 0;
+
+            let pair = if is_right {
+                [hash, self.default_hashes[height]]
+            } else {
+                // node at `sibling_index` is always expected to be present
+                // if it is not, then the tree is corrupted
+                [self.get_opt(height as u32, sibling_index)?, hash]
+            };
+
+            hash = poseidon(pair.as_ref(), self.params.compress());
+        }
+        Some(hash)
+    }
+
     pub fn get_root_after_virtual<I>(
         &self,
         new_commitments: I,
@@ -2151,6 +2182,17 @@ mod tests {
         let root_at_0 = tree.get_root_at(0);
         let root_at_checkpoint = tree.get_root_at(check_tx_next_index);
         let root_at_last = tree.get_root_at(tree.next_index);
+
+        assert!(root_at_0.is_some());
+        assert!(root_at_checkpoint.is_some());
+        assert!(root_at_last.is_some());
+        assert_eq!(root_at_0.unwrap(), root_0);
+        assert_eq!(root_at_checkpoint.unwrap(), root_checkpoint);
+        assert_eq!(root_at_last.unwrap(), root_last);
+
+        let root_at_0 = tree.get_root_at_iter(0);
+        let root_at_checkpoint = tree.get_root_at_iter(check_tx_next_index);
+        let root_at_last = tree.get_root_at_iter(tree.next_index);
 
         assert!(root_at_0.is_some());
         assert!(root_at_checkpoint.is_some());
