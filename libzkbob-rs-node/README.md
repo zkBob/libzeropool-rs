@@ -56,3 +56,11 @@ Builds the Node addon (`index.node`) from source.
 
 Runs the unit tests by calling `cargo test`. You can learn more about [adding tests to your Rust code](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) from the [Rust book](https://doc.rust-lang.org/book/).
 
+## Testing suite
+
+You can find the library usage example with few tests in `test.js` file
+You can launch it with the following command after building the local library:
+
+```sh
+$ node test.js
+```
