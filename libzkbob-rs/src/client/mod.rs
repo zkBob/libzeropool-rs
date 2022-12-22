@@ -110,7 +110,7 @@ pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
     pub sign_callback: Option<Box<dyn Fn(&[u8]) -> Vec<u8>>>, // TODO: Find a way to make it async
 }
 
-impl<'p, D, P> UserAccount<D, P>
+impl<D, P> UserAccount<D, P>
 where
     D: KeyValueDB,
     P: PoolParams,
