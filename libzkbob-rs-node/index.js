@@ -61,6 +61,26 @@ class MerkleTree {
     rollback(index) {
         return zp.merkleRollback(this.inner, index)
     }
+
+    wipe() {
+        zp.merkleWipe(this.inner)
+    }
+
+    getLeftSiblings(index) {
+        return zp.merkleGetLeftSiblings(this.inner, index)
+    }
+
+    getLastStableIndex() {
+        return zp.merkleGetLastStableIndex(this.inner)
+    }
+
+    setLastStableIndex(index) {
+        zp.merkleSetLastStableIndex(this.inner, index)
+    };
+
+    getRootAt(index) {
+        return zp.merkleGetRootAt(this.inner, index)
+    }
 }
 
 class TxStorage {

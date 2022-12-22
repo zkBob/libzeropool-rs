@@ -8,8 +8,11 @@ use libzkbob_rs::{
   libzeropool::fawkes_crypto::borsh::{BorshSerialize, BorshDeserialize},
   libzeropool::POOL_PARAMS
 };
-use crate::{Fr};
+use crate::Fr;
 use crate::ts_types::RawHashes;
+
+#[cfg(feature = "multicore")]
+use rayon::prelude::*;
 
 
 #[wasm_bindgen]
@@ -45,4 +48,14 @@ impl Helpers {
 
       commitment.to_string()
     }
+}
+
+#[cfg(feature = "multicore")]
+pub fn vec_into_iter<T: Send>(col: Vec<T>) -> rayon::vec::IntoIter<T> {
+    col.into_par_iter()
+}
+
+#[cfg(not(feature = "multicore"))]
+pub fn vec_into_iter<T: Send>(col: Vec<T>) -> <Vec<T> as IntoIterator>::IntoIter {
+    col.into_iter()
 }

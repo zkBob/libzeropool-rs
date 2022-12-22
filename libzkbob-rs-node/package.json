@@ -1,6 +1,6 @@
 {
   "name": "libzkbob-rs-node",
-  "version": "0.1.27",
+  "version": "0.2.2",
   "description": "Neon version of libzkbob-rs",
   "main": "index.js",
   "types": "index.d.ts",

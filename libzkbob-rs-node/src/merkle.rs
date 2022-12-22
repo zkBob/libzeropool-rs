@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::vec::Vec;
-
-use libzkbob_rs::libzeropool::fawkes_crypto::borsh::BorshDeserialize;
+use libzkbob_rs::libzeropool::fawkes_crypto::borsh::{BorshSerialize, BorshDeserialize};
 use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
 use libzkbob_rs::libzeropool::{
-    constants::{HEIGHT, OUTPLUSONELOG},
+    constants::{HEIGHT, OUT, OUTPLUSONELOG},
     POOL_PARAMS,
 };
 use libzkbob_rs::merkle::NativeMerkleTree;
 use neon::prelude::*;
 use neon::types::buffer::TypedArray;
+//use serde::Serialize;
 
 use crate::PoolParams;
 
@@ -148,9 +148,9 @@ pub fn merkle_get_node(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn merkle_get_next_index(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tree = cx.argument::<BoxedMerkleTree>(0)?;
 
-    let root = tree.read().unwrap().inner.next_index();
+    let next_index = tree.read().unwrap().inner.next_index();
 
-    let result = neon_serde::to_value(&mut cx, &root).unwrap();
+    let result = neon_serde::to_value(&mut cx, &next_index).unwrap();
 
     Ok(result)
 }
@@ -209,7 +209,7 @@ pub fn merkle_get_virtual_node(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(result)
 }
 
-pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tree = cx.argument::<BoxedMerkleTree>(0)?;
     let rollback_index = {
         let num = cx.argument::<JsNumber>(1)?;
@@ -217,7 +217,97 @@ pub fn merkle_rollback(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     };
 
     let mut a = tree.write().unwrap();
-    a.inner.rollback(rollback_index);
+    let new_next_index = a.inner.rollback(rollback_index);
+
+    let result = neon_serde::to_value(&mut cx, &new_next_index).unwrap();
+
+    Ok(result)
+}
+
+pub fn merkle_wipe(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    tree.write().unwrap().inner.wipe();
 
     Ok(cx.undefined())
+}
+
+pub fn merkle_get_left_siblings(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+    let index = {
+        let num = cx.argument::<JsNumber>(1)?;
+        num.value(&mut cx) as u64
+    };
+
+    if index & OUTPLUSONELOG as u64 != 0 {
+        return cx.throw_error(format!("Index to get sibling from should be multiple of {}", OUT + 1));
+    }
+
+    let siblings = tree.read().unwrap().inner.get_left_siblings(index);    
+    let array = match siblings {
+        Some(val) => {
+            let result: Result<Vec<String>, String> = val
+                .into_iter()
+                .map(|node| {
+                    let mut node_bytes = vec![];
+                    node.value.serialize(&mut node_bytes).unwrap();
+                    node_bytes.reverse();
+                    let node_string = hex::encode(node_bytes);
+
+
+                    let res = format!("{:02x}{:012x}{}", node.height, node.index, node_string);
+
+                    if res.len() != 78 {
+                        return Err(format!("Internal error (sibling length {} is invalid)", res.len()));
+                    }
+
+                    Ok(res)
+                })
+                .collect();
+            
+            result
+        },
+        None => Err(format!("Tree is undefined at index {}", index))
+    };
+
+    match array {
+        Ok(val) => Ok(neon_serde::to_value(&mut cx, &val).unwrap()),
+        Err(e) => cx.throw_error(e),
+    }
+}
+
+pub fn merkle_get_last_stable_index(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    let stable_index = tree.read().unwrap().inner.get_last_stable_index();
+
+    let result = neon_serde::to_value(&mut cx, &stable_index).unwrap();
+
+    Ok(result)
+}
+
+pub fn merkle_set_last_stable_index(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+    let stable_index = {    
+        let num = cx.argument::<JsNumber>(1)?;
+        num.value(&mut cx) as u64
+    };
+
+    tree.write().unwrap().inner.set_last_stable_index(Some(stable_index));
+
+    Ok(cx.undefined())
+}
+
+pub fn merkle_get_root_at(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let tree = cx.argument::<BoxedMerkleTree>(0)?;
+
+    let index = {
+        let num = cx.argument::<JsNumber>(1)?;
+        num.value(&mut cx) as u64
+    };
+
+    let root = tree.read().unwrap().inner.get_root_at(index);
+    let result = neon_serde::to_value(&mut cx, &root).unwrap();
+
+    Ok(result)
 }

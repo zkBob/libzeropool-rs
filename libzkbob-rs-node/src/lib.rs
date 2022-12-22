@@ -63,6 +63,11 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("merkleGetAllNodes", merkle::merkle_get_all_nodes)?;
     cx.export_function("merkleGetVirtualNode", merkle::merkle_get_virtual_node)?;
     cx.export_function("merkleRollback", merkle::merkle_rollback)?;
+    cx.export_function("merkleWipe", merkle::merkle_wipe)?;
+    cx.export_function("merkleGetLeftSiblings", merkle::merkle_get_left_siblings)?;
+    cx.export_function("merkleGetLastStableIndex", merkle::merkle_get_last_stable_index)?;
+    cx.export_function("merkleSetLastStableIndex", merkle::merkle_set_last_stable_index)?;
+    cx.export_function("merkleGetRootAt", merkle::merkle_get_root_at)?;
 
     cx.export_function("txStorageNew", storage::tx_storage_new)?;
     cx.export_function("txStorageAdd", storage::tx_storage_add)?;

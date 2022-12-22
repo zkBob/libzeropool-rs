@@ -24,7 +24,12 @@ declare class MerkleTree {
         new_hashes_left_index: number,
         new_hashes_right_index: number,
     ): any;
-    rollback(index: number): void;
+    rollback(index: number): number;
+    wipe(): void;
+    getLeftSiblings(index: number): string[];
+    getLastStableIndex(): number;
+    setLastStableIndex(index: number): void;
+    getRootAt(index: number): string;
 }
 
 declare class TxStorage {

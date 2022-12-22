@@ -81,6 +81,12 @@ export interface MerkleProof {
     path: boolean[];
 }
 
+export interface TreeNode {
+    index: number;
+    height: number;
+    value: string;
+}
+
 export interface Proof {
     inputs: string[];
     proof: SnarkProof;
@@ -151,6 +157,12 @@ export interface ParseTxsResult {
     stateUpdate: StateUpdate;
 }
 
+export interface ParseTxsColdStorageResult {
+    decryptedMemos: DecryptedMemo[];
+    txCnt: number;
+    decryptedLeafsCnt: number;
+}
+
 "#;
 
 #[wasm_bindgen]
@@ -193,6 +205,12 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "TreeSec")]
     pub type TreeSec;
+
+    #[wasm_bindgen(typescript_type = "TreeNode")]
+    pub type TreeNode;
+
+    #[wasm_bindgen(typescript_type = "TreeNode[]")]
+    pub type TreeNodes;
 
     #[wasm_bindgen(typescript_type = "Proof")]
     pub type Proof;
@@ -239,6 +257,9 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "IWithdrawData[]")]
     pub type IMultiWithdrawData;
 
+    #[wasm_bindgen(typescript_type = "DecryptedMemo")]
+    pub type DecryptedMemo;
+
     #[wasm_bindgen(typescript_type = "DecryptedMemo[]")]
     pub type DecryptedMemos;
 
@@ -247,6 +268,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "ParseTxsResult")]
     pub type ParseTxsResult;
+
+    #[wasm_bindgen(typescript_type = "ParseTxsColdStorageResult")]
+    pub type ParseTxsColdStorageResult;
 }
 
 #[derive(Serialize, Deserialize, Clone)]
