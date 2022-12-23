@@ -392,17 +392,11 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             return None;
         }
 
-        if index == 0 {
-            return Some(self.default_hashes[constants::HEIGHT]);
-        }
-
-        let non_zero_sibling_height = index.trailing_zeros() as usize;
+        let non_zero_sibling_height = (index.trailing_zeros() as usize).min(constants::HEIGHT);
         let mut hash = self.default_hashes[non_zero_sibling_height];
 
         for height in non_zero_sibling_height..constants::HEIGHT {
-            let node_index = index >> height;
-
-            let sibling_index = node_index ^ 1;
+            let sibling_index = (index >> height) ^ 1;
             let is_right = sibling_index & 1 != 0;
 
             let pair = if is_right {
