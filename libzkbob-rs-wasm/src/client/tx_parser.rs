@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzeropool::{native::{account::Account, note::Note, cipher, key}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}};
+use libzeropool::{native::{account::Account, note::Note, cipher::{self, symcipher_decryption_keys}, key}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}};
 use libzkbob_rs::{merkle::Hash, keys::Keys};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
@@ -8,7 +8,7 @@ use std::iter::IntoIterator;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter};
+use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter, TxMemoChunk};
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StateUpdate {
@@ -49,6 +49,14 @@ pub struct ParseColdStorageResult {
     pub tx_cnt: usize,
     #[serde(rename = "decryptedLeafsCnt")]
     pub decrypted_leafs_cnt: usize,
+}
+
+/// Describes one memo chunk (account\note) along with decryption key
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct MemoChunk {
+    pub index: u64,
+    pub encrypted: Vec<u8>,
+    pub key: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -100,6 +108,38 @@ impl TxParser {
             .unwrap()
             .unchecked_into::<ParseTxsResult>();
         Ok(parse_result)
+    }
+
+    #[wasm_bindgen(js_name = "extractDecryptKeys")]
+    pub fn extract_decrypt_keys(
+        &self,
+        sk: &[u8],
+        index: u64,
+        memo: &[u8],
+    ) -> Result<Vec<TxMemoChunk>, JsValue> {
+        let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
+            .ok_or_else(|| js_err!("Invalid spending key"))?;
+        let eta = Keys::derive(sk, &self.params).eta;
+        //(index, chunk, key)
+        let result = symcipher_decryption_keys(eta, memo, &self.params).unwrap_or(vec![]);
+    
+        let chunks = result
+        .iter()
+        .map(|(chunk_idx, chunk, key)| {
+            let res = MemoChunk {
+                index: index + chunk_idx,
+                encrypted: chunk.clone(),
+                key: key.clone()
+            };
+
+            serde_wasm_bindgen::to_value(&res)
+                .unwrap()
+                .unchecked_into::<TxMemoChunk>()
+        })
+        .collect();
+        
+        Ok(chunks)
+
     }
 }
 

@@ -163,6 +163,12 @@ export interface ParseTxsColdStorageResult {
     decryptedLeafsCnt: number;
 }
 
+export interface TxMemoChunk {
+    index: number;
+    encrypted: Uint8Array;
+    key: Uint8Array;
+}
+
 "#;
 
 #[wasm_bindgen]
@@ -271,6 +277,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "ParseTxsColdStorageResult")]
     pub type ParseTxsColdStorageResult;
+
+    #[wasm_bindgen(typescript_type = "TxMemoChunk")]
+    pub type TxMemoChunk;
 }
 
 #[derive(Serialize, Deserialize, Clone)]
