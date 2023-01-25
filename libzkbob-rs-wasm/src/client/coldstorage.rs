@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
+use libzkbob_rs::libzeropool::{fawkes_crypto::ff_uint::Num, native::cipher::ECPointsFormat};
 use crate::Fr;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -17,4 +17,5 @@ pub struct BulkData {
     pub root_before: Num<Fr>,
     pub root_after: Num<Fr>,
     pub txs: Vec<TxInputData>,
+    pub ec_points_format: ECPointsFormat,
 }

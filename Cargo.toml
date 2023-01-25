@@ -11,3 +11,8 @@ default-members = [
     "libzkbob-rs-node",
     "libs/kvdb-web",
 ]
+
+[patch.crates-io]
+libzeropool-zkbob = { git = "https://github.com/zkbob/libzeropool-zkbob", branch = "feature/decompress_ec_points" }
+fawkes-crypto-zkbob = { git = "https://github.com/zkBob/fawkes-crypto", branch = "feature/decompress_unchecked" }
+libzkbob-rs = { path = "./libzkbob-rs"}

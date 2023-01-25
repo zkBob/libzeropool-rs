@@ -387,6 +387,7 @@ impl UserAccount {
                 let eta = &self.inner.borrow().keys.eta;
                 let params = &self.inner.borrow().params;
                 let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
+                let ec_points_format = bulk.ec_points_format;
                 let bulk_results: Vec<ParseResult> = vec_into_iter(bulk.txs)
                     .filter(|tx| range.contains(&tx.index))
                     .filter_map(|tx| -> Option<ParseResult> {
@@ -396,7 +397,8 @@ impl UserAccount {
                             &tx.memo,
                             Some(&tx.tx_hash),
                             eta,
-                            params
+                            params,
+                            ec_points_format
                         ).ok()
                     })
                     .collect();

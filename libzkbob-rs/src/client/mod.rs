@@ -161,12 +161,12 @@ where
 
     /// Attempts to decrypt notes.
     pub fn decrypt_notes(&self, data: Vec<u8>) -> Vec<Option<Note<P::Fr>>> {
-        cipher::decrypt_in(self.keys.eta, &data, &self.params)
+        cipher::decrypt_in(self.keys.eta, &data, &self.params, Default::default())
     }
 
     /// Attempts to decrypt account and notes.
     pub fn decrypt_pair(&self, data: Vec<u8>) -> Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
-        cipher::decrypt_out(self.keys.eta, &data, &self.params)
+        cipher::decrypt_out(self.keys.eta, &data, &self.params, Default::default())
     }
 
     pub fn is_own_address(&self, address: &str) -> bool {
