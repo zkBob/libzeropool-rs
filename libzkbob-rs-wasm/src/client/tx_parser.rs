@@ -1,14 +1,31 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzeropool::{native::{account::Account, note::Note, cipher::{self, symcipher_decryption_keys}, key}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}};
+use libzeropool::{
+    native::{
+        account::Account as NativeAccount,
+        note::Note as NativeNote,
+        cipher::{
+            self,
+            symcipher_decryption_keys,
+            decrypt_account,
+            decrypt_note
+        },
+        key
+    },
+    fawkes_crypto::ff_uint::{ Num, NumRepr, Uint }
+};
 use libzkbob_rs::{merkle::Hash, keys::Keys};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
+use crate::{ Account, Note };
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter, TxMemoChunk};
+use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs,
+            ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter,
+            TxMemoChunk, TxInput,
+        };
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StateUpdate {
@@ -17,15 +34,15 @@ pub struct StateUpdate {
     #[serde(rename = "newCommitments")]
     pub new_commitments: Vec<(u64, Hash<Fr>)>,
     #[serde(rename = "newAccounts")]
-    pub new_accounts: Vec<(u64, Account<Fr>)>,
+    pub new_accounts: Vec<(u64, NativeAccount<Fr>)>,
     #[serde(rename = "newNotes")]
-    pub new_notes: Vec<Vec<(u64, Note<Fr>)>>
+    pub new_notes: Vec<Vec<(u64, NativeNote<Fr>)>>
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct DecMemo {
     pub index: u64,
-    pub acc: Option<Account<Fr>>,
+    pub acc: Option<NativeAccount<Fr>>,
     #[serde(rename = "inNotes")]
     pub in_notes: Vec<IndexedNote>,
     #[serde(rename = "outNotes")]
@@ -141,6 +158,24 @@ impl TxParser {
         Ok(chunks)
 
     }
+
+    #[wasm_bindgen(js_name = "symcipherDecryptAcc")]
+    pub fn symcipher_decrypt_acc(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Account, JsValue> {
+        let acc = decrypt_account(sym_key, encrypted, &self.params)
+                                .ok_or_else(|| js_err!("Unable to decrypt account"))?;
+        
+        Ok(serde_wasm_bindgen::to_value(&acc).unwrap().unchecked_into::<Account>())
+    }
+
+    #[wasm_bindgen(js_name = "symcipherDecryptNote")]
+    pub fn symcipher_decrypt_note(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Note, JsValue> {
+        let note = decrypt_note(sym_key, encrypted, &self.params)
+                                .ok_or_else(|| js_err!("Unable to decrypt note"))?;
+        
+        Ok(serde_wasm_bindgen::to_value(&note).unwrap().unchecked_into::<Note>())
+    }
+
+
 }
 
 pub fn parse_tx(

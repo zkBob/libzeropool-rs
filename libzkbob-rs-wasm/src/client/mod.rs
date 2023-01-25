@@ -21,14 +21,14 @@ use libzeropool::{
     },
 };
 use libzkbob_rs::{
-    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
+    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment, TransactionInputs},
     merkle::{Hash, Node}
 };
 use serde::{Serialize};
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::ParseTxsColdStorageResult;
+use crate::{ParseTxsColdStorageResult, TxInput};
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -472,6 +472,25 @@ impl UserAccount {
         let data = self.inner.borrow().state.get_usable_notes();
 
         serde_wasm_bindgen::to_value(&data).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = "getTxInputs")]
+    /// Returns transaction inputs: account and notes
+    pub fn get_tx_inputs(&self, index: u64) -> Result<TxInput, JsValue> {
+        if index & constants::OUTPLUSONELOG as u64 != 0 {
+            return Err(js_err!(&format!("Account index should be multiple of {}", constants::OUT + 1)));
+        }
+
+        let inputs = self
+            .inner
+            .borrow()
+            .get_tx_input(index)
+            .ok_or_else(|| js_err!("No account found at index {}", index))?;
+            
+
+        Ok(serde_wasm_bindgen::to_value(&inputs)
+            .unwrap()
+            .unchecked_into::<TxInput>())
     }
 
     #[wasm_bindgen(js_name = "nextTreeIndex")]

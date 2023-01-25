@@ -169,6 +169,11 @@ export interface TxMemoChunk {
     key: Uint8Array;
 }
 
+export interface TxInput {
+    account: { index: number, account: Account };
+    notes: { index: number, note: Note }[];
+}
+
 "#;
 
 #[wasm_bindgen]
@@ -280,6 +285,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "TxMemoChunk")]
     pub type TxMemoChunk;
+
+    #[wasm_bindgen(typescript_type = "TxInput")]
+    pub type TxInput;
 }
 
 #[derive(Serialize, Deserialize, Clone)]

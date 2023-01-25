@@ -23,7 +23,7 @@ use libzeropool::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::{convert::TryInto, io::Write};
+use std::{convert::TryInto, io::Write, ops::Range};
 use thiserror::Error;
 
 use self::state::{State, Transaction};
@@ -67,6 +67,14 @@ pub struct TransactionData<Fr: PrimeField> {
     pub memo: Vec<u8>,
     pub commitment_root: Num<Fr>,
     pub out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TransactionInputs<Fr: PrimeField> {
+    #[serde(bound(serialize = "", deserialize = ""))]
+    pub account: (u64, Account<Fr>),
+    #[serde(bound(serialize = "", deserialize = ""))]
+    pub notes: Vec<(u64, Note<Fr>)>,
 }
 
 pub type TokenAmount<Fr> = BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }>;
@@ -176,6 +184,20 @@ where
         result
     }
 
+    fn initial_account(&self) -> Account<P::Fr> {
+        // Initial account should have d = pool_id to protect from reply attacks
+        let d = self.pool_id;
+        let p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
+        
+        Account {
+            d: self.pool_id,
+            p_d,
+            i: BoundedNum::new(Num::ZERO),
+            b: BoundedNum::new(Num::ZERO),
+            e: BoundedNum::new(Num::ZERO),
+        }
+    }
+
     /// Constructs a transaction.
     pub fn create_tx(
         &self,
@@ -207,18 +229,7 @@ where
 
         // initial input account (from non-optimistic state)
         let in_account = in_account_optimistic.unwrap_or_else(|| {
-            state.latest_account.unwrap_or_else(|| {
-                // Initial account should have d = pool_id to protect from reply attacks
-                let d = self.pool_id;
-                let p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
-                Account {
-                    d: self.pool_id,
-                    p_d,
-                    i: BoundedNum::new(Num::ZERO),
-                    b: BoundedNum::new(Num::ZERO),
-                    e: BoundedNum::new(Num::ZERO),
-                }
-            })
+            state.latest_account.unwrap_or_else(|| self.initial_account())
         });
 
         let tree = &self.state.tree;
@@ -545,6 +556,21 @@ where
             memo: memo_data,
             commitment_root: out_commit,
             out_hashes,
+        })
+    }
+
+    pub fn get_tx_input(&self, index: u64) -> Option<TransactionInputs<P::Fr>> {
+        let account = self.state.get_account(index).unwrap_or(return None );
+
+        let input_acc = self.state.get_previous_account(index).unwrap_or_else(|| (0, self.initial_account()));
+        let note_lower_bound = input_acc.1.i.as_num().to_string().parse::<u64>().unwrap();
+        let note_upper_bound = account.i.as_num().to_string().parse::<u64>().unwrap();
+        let notes_range: Range<u64> = note_lower_bound..note_upper_bound;
+        let input_notes = self.state.get_notes_in_range(notes_range);
+
+        Some(TransactionInputs {
+            account: input_acc,
+            notes: input_notes,
         })
     }
 }
