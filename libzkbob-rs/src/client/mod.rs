@@ -560,11 +560,14 @@ where
     }
 
     pub fn get_tx_input(&self, index: u64) -> Option<TransactionInputs<P::Fr>> {
-        let account = self.state.get_account(index).unwrap_or(return None );
+        let account = match self.state.get_account(index) {
+            Some(acc) => acc,
+            _ => return None,
+        };
 
         let input_acc = self.state.get_previous_account(index).unwrap_or_else(|| (0, self.initial_account()));
-        let note_lower_bound = input_acc.1.i.as_num().to_string().parse::<u64>().unwrap();
-        let note_upper_bound = account.i.as_num().to_string().parse::<u64>().unwrap();
+        let note_lower_bound = input_acc.1.i.to_num().try_into().unwrap();
+        let note_upper_bound = account.i.to_num().try_into().unwrap();
         let notes_range: Range<u64> = note_lower_bound..note_upper_bound;
         let input_notes = self.state.get_notes_in_range(notes_range);
 
@@ -577,8 +580,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use libzeropool::POOL_PARAMS;
+    use crate::random::CustomRng;
 
     #[test]
     fn test_create_tx_deposit_zero() {
@@ -658,6 +664,58 @@ mod tests {
 
     #[test]
     fn test_user_account_is_own_address() {
+        let params = POOL_PARAMS.clone();
+        let mut rng = CustomRng;
+        let state = State::init_test(POOL_PARAMS.clone());
+        let mut user_account = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+
+        let mut acc1 = Account::sample(&mut rng, &params);
+        acc1.i = BoundedNum::new(Num::from_str("100").unwrap());
+        let mut acc2 = Account::sample(&mut rng, &params);
+        acc2.i = BoundedNum::new(Num::from_str("259").unwrap());
+
+        let note0 = (50, Note::sample(&mut rng, &params));
+        let note1 = (257, Note::sample(&mut rng, &params));
+        let note2 = (258, Note::sample(&mut rng, &params));
+        let note3 = (259, Note::sample(&mut rng, &params));
+        let note4 = (300, Note::sample(&mut rng, &params));
+        let note5 = (666, Note::sample(&mut rng, &params));
+
+        user_account.state.add_account(128, acc1);
+        user_account.state.add_note(note0.0, note0.1);
+        user_account.state.add_note(note1.0, note1.1);
+        user_account.state.add_note(note2.0, note2.1);
+        user_account.state.add_note(note3.0, note3.1);
+        user_account.state.add_note(note4.0, note4.1);
+        user_account.state.add_note(note5.0, note5.1);
+        user_account.state.add_account(1024, acc2);
+
+        (0..10).into_iter().for_each(|idx| {
+            user_account.state.add_note(1024 + idx + 1, Note::sample(&mut rng, &params))
+        });
+
+        let inputs1 = user_account.get_tx_input(128).unwrap();
+        assert!(inputs1.account.1 == user_account.initial_account());
+        assert!(inputs1.notes.contains(&note0));
+        assert!(!inputs1.notes.contains(&note1));
+        assert!(!inputs1.notes.contains(&note2));
+        assert!(!inputs1.notes.contains(&note3));
+        assert!(!inputs1.notes.contains(&note4));
+        assert!(!inputs1.notes.contains(&note5));
+
+        let inputs2 = user_account.get_tx_input(1024).unwrap();
+        assert!(inputs2.account.1 == acc1);
+        assert!(!inputs2.notes.contains(&note0));
+        assert!(inputs2.notes.contains(&note1));
+        assert!(inputs2.notes.contains(&note2));
+        assert!(!inputs2.notes.contains(&note3));
+        assert!(!inputs2.notes.contains(&note4));
+        assert!(!inputs2.notes.contains(&note5));
+
+    }
+
+    #[test]
+    fn test_tx_inputs() {
         let acc_1 = UserAccount::new(
             Num::ZERO,
             State::init_test(POOL_PARAMS.clone()),

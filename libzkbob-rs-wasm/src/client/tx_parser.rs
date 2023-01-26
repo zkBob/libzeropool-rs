@@ -24,7 +24,7 @@ use rayon::prelude::*;
 
 use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs,
             ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter,
-            TxMemoChunk, TxInput,
+            TxMemoChunk,
         };
 
 #[derive(Serialize, Deserialize, Clone, Default)]

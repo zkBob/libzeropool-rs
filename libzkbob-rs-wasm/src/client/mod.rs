@@ -21,7 +21,7 @@ use libzeropool::{
     },
 };
 use libzkbob_rs::{
-    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment, TransactionInputs},
+    client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
     merkle::{Hash, Node}
 };
 use serde::{Serialize};

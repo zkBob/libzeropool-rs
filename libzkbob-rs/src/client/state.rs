@@ -6,7 +6,7 @@ use kvdb_memorydb::InMemory as MemoryDatabase;
 use kvdb_web::Database as WebDatabase;
 use libzeropool::{
     constants,
-    fawkes_crypto::{ff_uint::{Num, Uint}, ff_uint::PrimeField, BorshDeserialize, BorshSerialize},
+    fawkes_crypto::{ff_uint::Num, ff_uint::PrimeField, BorshDeserialize, BorshSerialize},
     native::{
         account::Account, account::Account as NativeAccount, note::Note, note::Note as NativeNote,
         params::PoolParams,
