@@ -1,4 +1,7 @@
-use libzeropool::native::note::Note as NativeNote;
+use libzeropool::native::{
+    note::Note as NativeNote,
+    account::Account as NativeAccount,
+};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -291,9 +294,21 @@ extern "C" {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct IndexedAccount {
+    pub index: u64,
+    pub account: NativeAccount<Fr>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IndexedNote {
     pub index: u64,
     pub note: NativeNote<Fr>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TxInputNodes {
+    pub account: IndexedAccount,
+    pub notes: Vec<IndexedNote>,
 }
 
 #[derive(Serialize, Deserialize)]

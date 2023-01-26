@@ -28,7 +28,7 @@ use serde::{Serialize};
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::{ParseTxsColdStorageResult, TxInput};
+use crate::{ParseTxsColdStorageResult, TxInput, TxInputNodes, IndexedAccount};
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -487,8 +487,23 @@ impl UserAccount {
             .get_tx_input(index)
             .ok_or_else(|| js_err!("No account found at index {}", index))?;
             
+        let res = TxInputNodes {
+            account: IndexedAccount {
+                index: inputs.account.0,
+                account: inputs.account.1
+            },
+            notes:  inputs
+                    .notes.into_iter()
+                    .map(|note| {
+                        IndexedNote {
+                            index: note.0,
+                            note: note.1,
+                        }
+                    })
+                    .collect()
+        };
 
-        Ok(serde_wasm_bindgen::to_value(&inputs)
+        Ok(serde_wasm_bindgen::to_value(&res)
             .unwrap()
             .unchecked_into::<TxInput>())
     }
