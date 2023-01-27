@@ -88,7 +88,7 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = "calculateNullifier")]
-    /// Generates a new private address.
+    /// Calculate nullifier from the account
     pub fn calculate_nullifier(&self, account: Account, index: u64) -> Result<JsHash, JsValue> {
         let in_account: NativeAccount<Fr> = serde_wasm_bindgen::from_value(account.into())?;
 
