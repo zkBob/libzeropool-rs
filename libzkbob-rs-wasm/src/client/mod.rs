@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 
+use libzeropool::native::tx::nullifier;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -85,6 +86,27 @@ impl UserAccount {
     pub fn generate_address(&self) -> String {
         self.inner.borrow().generate_address()
     }
+
+    #[wasm_bindgen(js_name = "calculateNullifier")]
+    /// Generates a new private address.
+    pub fn calculate_nullifier(&self, account: Account, index: u64) -> Result<JsHash, JsValue> {
+        let in_account: NativeAccount<Fr> = serde_wasm_bindgen::from_value(account.into())?;
+
+        let params = &self.inner.borrow().params;
+        let eta = &self.inner.borrow().keys.eta;
+        let in_account_hash = in_account.hash(params);
+        let nullifier = nullifier(
+            in_account_hash,
+            *eta,
+            index.into(),
+            params,
+        );
+
+        Ok(serde_wasm_bindgen::to_value(&nullifier)
+                    .unwrap()
+                    .unchecked_into::<JsHash>())
+    }
+
 
     #[wasm_bindgen(js_name = decryptNotes)]
     /// Attempts to decrypt notes.
