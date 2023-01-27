@@ -16,7 +16,9 @@ use libzeropool::{
         note::Note,
         params::PoolParams,
         tx::{
-            make_delta, nullifier, out_commitment_hash, tx_hash, tx_sign, TransferPub, TransferSec,
+            make_delta, nullifier, nullifier_intermediate_hash,
+            out_commitment_hash, tx_hash, tx_sign,
+            TransferPub, TransferSec,
             Tx,
         },
     },
@@ -73,6 +75,8 @@ pub struct TransactionData<Fr: PrimeField> {
 pub struct TransactionInputs<Fr: PrimeField> {
     #[serde(bound(serialize = "", deserialize = ""))]
     pub account: (u64, Account<Fr>),
+    #[serde(bound(serialize = "", deserialize = ""))]
+    pub intermediate_nullifier: Num<Fr>,   // intermediate nullifier hash
     #[serde(bound(serialize = "", deserialize = ""))]
     pub notes: Vec<(u64, Note<Fr>)>,
 }
@@ -571,8 +575,12 @@ where
         let notes_range: Range<u64> = note_lower_bound..note_upper_bound;
         let input_notes = self.state.get_notes_in_range(notes_range);
 
+        let params = &self.params;
+        let inh = nullifier_intermediate_hash(input_acc.1.hash(params), self.keys.eta, index.into(), params);
+
         Some(TransactionInputs {
             account: input_acc,
+            intermediate_nullifier: inh,
             notes: input_notes,
         })
     }

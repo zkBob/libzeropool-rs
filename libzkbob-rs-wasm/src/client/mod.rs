@@ -514,6 +514,7 @@ impl UserAccount {
                 index: inputs.account.0,
                 account: inputs.account.1
             },
+            intermediate_nullifier: inputs.intermediate_nullifier,
             notes:  inputs
                     .notes.into_iter()
                     .map(|note| {

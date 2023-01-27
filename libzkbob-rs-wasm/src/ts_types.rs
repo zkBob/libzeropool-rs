@@ -1,3 +1,4 @@
+use fawkes_crypto::ff_uint::Num;
 use libzeropool::native::{
     note::Note as NativeNote,
     account::Account as NativeAccount,
@@ -24,11 +25,11 @@ export interface Note {
 }
 
 export interface Account {
-    eta: string;
+    d: string;
+    p_d: string;
     i: string;
     b: string;
     e: string;
-    t: string;
 }
 
 export interface TransferPub {
@@ -174,6 +175,7 @@ export interface TxMemoChunk {
 
 export interface TxInput {
     account: { index: number, account: Account };
+    intermediateNullifier: string
     notes: { index: number, note: Note }[];
 }
 
@@ -308,6 +310,8 @@ pub struct IndexedNote {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TxInputNodes {
     pub account: IndexedAccount,
+    #[serde(rename = "intermediateNullifier")]
+    pub intermediate_nullifier: Num<Fr>,   // intermediate nullifier hash
     pub notes: Vec<IndexedNote>,
 }
 
