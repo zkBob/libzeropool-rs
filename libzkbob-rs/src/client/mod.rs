@@ -117,12 +117,11 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: Num<P::Fs>, state: State<D, P>, params: P) -> Self {
+    pub fn new(sk: Num<P::Fs>, pool_id: Num<P::Fr>, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
-            // For now it is constant, but later should be provided by user
-            pool_id: BoundedNum::new(Num::ZERO),
+            pool_id: BoundedNum::new(pool_id),
             keys,
             state,
             params,
@@ -131,9 +130,9 @@ where
     }
 
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], state: State<D, P>, params: P) -> Self {
+    pub fn from_seed(seed: &[u8], pool_id: Num<P::Fr>, state: State<D, P>, params: P) -> Self {
         let sk = reduce_sk(seed);
-        Self::new(sk, state, params)
+        Self::new(sk, pool_id, state, params)
     }
 
     fn generate_address_components(
@@ -557,7 +556,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
@@ -574,7 +573,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
@@ -592,7 +591,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -613,7 +612,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -634,11 +633,13 @@ mod tests {
     fn test_user_account_is_own_address() {
         let acc_1 = UserAccount::new(
             Num::ZERO,
+            Num::ZERO,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
+            Num::ZERO,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );

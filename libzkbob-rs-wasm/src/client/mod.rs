@@ -60,12 +60,18 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
+        if pool_id >= 1 << 24 {
+            return Err(js_err!("PoolID should be less than {}", 1 << 24));
+        }
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
-        let account = NativeUserAccount::new(sk, state.inner, POOL_PARAMS.clone());
+        let pool_id = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id)))
+            .ok_or_else(|| js_err!("Invalid pool id"))?;
+            
+        let account = NativeUserAccount::new(sk, pool_id, state.inner, POOL_PARAMS.clone());
 
         Ok(UserAccount {
             inner: Rc::new(RefCell::new(account)),
@@ -75,9 +81,9 @@ impl UserAccount {
     // TODO: Is this safe?
     #[wasm_bindgen(js_name = fromSeed)]
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn from_seed(seed: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
         let sk = reduce_sk(seed);
-        Self::new(&sk, state)
+        Self::new(&sk, pool_id, state)
     }
 
     #[wasm_bindgen(js_name = generateAddress)]
