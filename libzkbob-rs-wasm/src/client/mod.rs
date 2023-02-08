@@ -41,7 +41,7 @@ use crate::{
     MerkleProof, Pair, TreeNode, TreeNodes,
 };
 use tx_types::JsTxType;
-use crate::client::coldstorage::{ BulkData };
+use crate::client::coldstorage::BulkData;
 use crate::client::tx_parser::{ ParseResult, ParseColdStorageResult };
 
 mod tx_types;
@@ -389,7 +389,7 @@ impl UserAccount {
                 let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
                 let bulk_results: Vec<ParseResult> = vec_into_iter(bulk.txs)
                     .filter(|tx| range.contains(&tx.index))
-                    .map(|tx| -> ParseResult {
+                    .filter_map(|tx| -> Option<ParseResult> {
                         tx_parser::parse_tx(
                             tx.index,
                             &tx.commitment,
@@ -397,7 +397,7 @@ impl UserAccount {
                             Some(&tx.tx_hash),
                             eta,
                             params
-                        )
+                        ).ok()
                     })
                     .collect();
                 
