@@ -6,8 +6,8 @@ use libzeropool::{
         cipher::{
             self,
             symcipher_decryption_keys,
-            decrypt_account,
-            decrypt_note
+            decrypt_account_no_validate,
+            decrypt_note_no_validate
         },
         key
     },
@@ -161,7 +161,7 @@ impl TxParser {
 
     #[wasm_bindgen(js_name = "symcipherDecryptAcc")]
     pub fn symcipher_decrypt_acc(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Account, JsValue> {
-        let acc = decrypt_account(sym_key, encrypted, &self.params)
+        let acc = decrypt_account_no_validate(sym_key, encrypted, &self.params)
                                 .ok_or_else(|| js_err!("Unable to decrypt account"))?;
         
         Ok(serde_wasm_bindgen::to_value(&acc).unwrap().unchecked_into::<Account>())
@@ -169,7 +169,7 @@ impl TxParser {
 
     #[wasm_bindgen(js_name = "symcipherDecryptNote")]
     pub fn symcipher_decrypt_note(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Note, JsValue> {
-        let note = decrypt_note(sym_key, encrypted, &self.params)
+        let note = decrypt_note_no_validate(sym_key, encrypted, &self.params)
                                 .ok_or_else(|| js_err!("Unable to decrypt note"))?;
         
         Ok(serde_wasm_bindgen::to_value(&note).unwrap().unchecked_into::<Note>())

@@ -73,11 +73,8 @@ pub struct TransactionData<Fr: PrimeField> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TransactionInputs<Fr: PrimeField> {
-    #[serde(bound(serialize = "", deserialize = ""))]
     pub account: (u64, Account<Fr>),
-    #[serde(bound(serialize = "", deserialize = ""))]
     pub intermediate_nullifier: Num<Fr>,   // intermediate nullifier hash
-    #[serde(bound(serialize = "", deserialize = ""))]
     pub notes: Vec<(u64, Note<Fr>)>,
 }
 

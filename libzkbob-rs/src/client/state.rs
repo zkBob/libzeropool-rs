@@ -201,7 +201,7 @@ where
 
     pub fn get_notes_in_range(&self, range: Range<u64>) -> Vec<(u64, Note<P::Fr>)> {
         self.txs
-            .iter_slice(range.start..=(if range.end==0 { 0 } else { range.end-1 }))
+            .iter_slice(range.start..=range.end.saturating_sub(1))
             .filter_map(|(idx, tx)| match tx {
                 Transaction::Note(note) => Some((idx, note)),
                 _ => None,

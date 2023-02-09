@@ -499,7 +499,7 @@ impl UserAccount {
     #[wasm_bindgen(js_name = "getTxInputs")]
     /// Returns transaction inputs: account and notes
     pub fn get_tx_inputs(&self, index: u64) -> Result<TxInput, JsValue> {
-        if index & constants::OUTPLUSONELOG as u64 != 0 {
+        if index & constants::OUT as u64 != 0 {
             return Err(js_err!(&format!("Account index should be multiple of {}", constants::OUT + 1)));
         }
 
