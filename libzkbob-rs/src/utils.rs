@@ -27,6 +27,15 @@ pub fn zero_note<Fr: PrimeField>() -> Note<Fr> {
         t: BoundedNum::new(Num::ZERO),
     }
 }
+pub fn zero_account<Fr: PrimeField>() -> Account<Fr> {
+    Account {
+        d: BoundedNum::new(Num::ZERO),
+        p_d: Num::ZERO,
+        i: BoundedNum::new(Num::ZERO),
+        b: BoundedNum::new(Num::ZERO),
+        e: BoundedNum::new(Num::ZERO),
+    }
+}
 
 pub fn zero_proof<Fr: PrimeField>() -> MerkleProof<Fr, { constants::HEIGHT }> {
     MerkleProof {

@@ -22,6 +22,7 @@ struct Constants {
     IN: usize,
     OUTLOG: usize,
     OUT: usize,
+    DELEGATED_DEPOSITS_NUM: usize,
 }
 
 #[neon::main]
@@ -33,6 +34,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
             IN: constants::IN,
             OUTLOG: constants::OUTPLUSONELOG,
             OUT: constants::OUT,
+            DELEGATED_DEPOSITS_NUM: constants::DELEGATED_DEPOSITS_NUM,
         },
     )
     .unwrap();
@@ -80,5 +82,11 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("helpersNumToStr", helpers::num_to_str)?;
     cx.export_function("helpersStrToNum", helpers::str_to_num)?;
 
+    cx.export_function("proveDelegatedDeposit", proof::prove_delegated_deposit)?;
+    cx.export_function(
+        "proveDelegatedDepositAsync",
+        proof::prove_delegated_deposit_async,
+    )?;
+    
     Ok(())
 }

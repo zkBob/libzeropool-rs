@@ -46,3 +46,21 @@ where
 
     prove(params, &tree_pub, &tree_sec, circuit)
 }
+
+pub fn prove_delegated_deposit<P, E>(
+    params: &Parameters<E>,
+    pool_params: &P,
+    d_pub: DelegatedDepositBatchPub<E::Fr>,
+    d_sec: DelegatedDepositBatchSec<E::Fr>,
+) -> (Vec<Num<E::Fr>>, Proof<E>)
+where
+    P: PoolParams<Fr = E::Fr>,
+    E: Engine,
+{
+    let circuit = |public, secret| {
+        check_delegated_deposit_batch(&public, &secret, pool_params);
+    };
+
+    prove(params, &d_pub, &d_sec, circuit)
+}
+
