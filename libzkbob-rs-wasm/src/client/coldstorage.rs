@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use libzeropool::fawkes_crypto::ff_uint::Num;
+use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
 use crate::Fr;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]

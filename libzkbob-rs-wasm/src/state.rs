@@ -1,4 +1,4 @@
-use libzeropool::{
+use libzkbob_rs::libzeropool::{
     fawkes_crypto::{borsh, BorshDeserialize, BorshSerialize},
     native::{account::Account as NativeAccount, note::Note as NativeNote},
 };

@@ -4,7 +4,7 @@ use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::prover::P
 use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::{verify, VK};
 use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
 use libzkbob_rs::libzeropool::POOL_PARAMS;
-use libzkbob_rs::proof::{prove_tree as prove_tree_native, prove_tx as prove_tx_native};
+use libzkbob_rs::proof::{prove_tree as prove_tree_native, prove_tx as prove_tx_native, prove_delegated_deposit as prove_delegated_deposit_native};
 use neon::prelude::*;
 use serde::{Deserialize, Serialize};
 

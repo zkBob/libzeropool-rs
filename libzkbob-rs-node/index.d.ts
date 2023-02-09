@@ -3,6 +3,7 @@ export namespace Constants {
     export const IN: number;
     export const OUTLOG: number;
     export const OUT: number;
+    export const DELEGATED_DEPOSITS_NUM: number;
 }
 
 declare class MerkleTree {
@@ -146,4 +147,42 @@ declare class Helpers {
     static parseDelta(delta: string): { v: string, e: string, index: string, poolId: string }
     static numToStr(num: Buffer): string
     static strToNum(str: string): Buffer
+}
+
+declare class Keys {
+    public sk: string;
+    public a: string;
+    public eta: string;
+
+    static derive(sk: string): Keys;
+}
+
+declare class TransactionData {
+    public: TransferPub;
+    secret: TransferSec;
+    ciphertext: Buffer;
+    memo: Buffer;
+    commitment_root: string;
+    out_hashes: string[];
+}
+
+interface FullDelegatedDeposit {
+    id: string | number,
+    owner: string | number,
+    receiver_d: string | number,
+    receiver_p: string | number,
+    denominated_amount: string | number,
+    denominated_fee: string | number,
+    expired: string | number,
+}
+
+declare class DelegatedDepositsData {
+    public: DelegatedDepositBatchPub;
+    secret: DelegatedDepositBatchSec;
+    memo: Buffer;
+
+    static create(
+        deposits: FullDelegatedDeposit[],
+        dd_params: Params,
+    ): Promise<DelegatedDepositsData>;
 }

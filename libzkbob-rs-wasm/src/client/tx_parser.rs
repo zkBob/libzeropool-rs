@@ -1,8 +1,6 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzeropool::{native::{account::Account, note::Note, cipher, key}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}};
-use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::
-    {FullDelegatedDeposit, DELEGATED_DEPOSIT_MAGIC, FULL_DELEGATED_DEPOSIT_SIZE,}
-};
+use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
+use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_MAGIC};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
@@ -115,27 +113,25 @@ pub fn parse_tx(
 ) -> ParseResult {
 
     // Special case: transaction contains delegated deposits
-    if &memo[0..4] == &DELEGATED_DEPOSIT_MAGIC {
-        let account_hash =
-            Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&memo[4..36])));
-        let num_deposits = (memo.len() - DELEGATED_DEPOSIT_MAGIC.len() - 32)
-            / FULL_DELEGATED_DEPOSIT_SIZE;
+    if memo[0..4] == DELEGATED_DEPOSIT_MAGIC {
+        let num_deposits =
+            (memo.len() - DELEGATED_DEPOSIT_MAGIC.len()) / MEMO_DELEGATED_DEPOSIT_SIZE;
 
-        let delegated_deposits = (&memo[36..])
-            .chunks(FULL_DELEGATED_DEPOSIT_SIZE)
+        let delegated_deposits = memo[4..]
+            .chunks(MEMO_DELEGATED_DEPOSIT_SIZE)
             .take(num_deposits)
-            .map(|data| std::io::Result::Ok(FullDelegatedDeposit::read(data)?))
-            .collect::<Result<Vec<_>, _>>()
+            .map(|data| MemoDelegatedDeposit::read(data))
+            .collect::<std::io::Result<Vec<_>>>()
             .unwrap();
 
         let in_notes_indexed = delegated_deposits
             .iter()
             .enumerate()
             .filter_map(|(i, d)| {
-                let p_d = derive_key_p_d(d.receiver_d.to_num(), eta, &self.params).x;
+                let p_d = derive_key_p_d(d.receiver_d.to_num(), eta.clone(), params).x;
                 if d.receiver_p == p_d {
                     Some(IndexedNote {
-                        index: index + 1 + (i as u64), // FIXME: offset index
+                        index: index + 1 + (i as u64),
                         note: d.to_delegated_deposit().to_note(),
                     })
                 } else {
@@ -144,18 +140,15 @@ pub fn parse_tx(
             })
             .collect::<Vec<_>>();
 
-        let in_notes = in_notes_indexed
-            .iter()
-            .map(|n| (n.index, n.note.clone()))
-            .collect();
+        let in_notes = in_notes_indexed.iter().map(|n| (n.index, n.note)).collect();
 
-        let hashes = [account_hash]
+        let hashes = [zero_account().hash(params)]
             .iter()
             .copied()
             .chain(
                 delegated_deposits
                     .iter()
-                    .map(|d| d.to_delegated_deposit().to_note().hash(&self.params)),
+                    .map(|d| d.to_delegated_deposit().to_note().hash(params)),
             )
             .collect();
 

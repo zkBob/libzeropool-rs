@@ -1,4 +1,4 @@
-use libzeropool::{
+use libzkbob_rs::libzeropool::{
     circuit::tree::tree_update,
     circuit::tx::c_transfer,
     fawkes_crypto::{

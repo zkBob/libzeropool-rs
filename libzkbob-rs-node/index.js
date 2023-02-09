@@ -115,6 +115,8 @@ const Proof = {
     tree: zp.proveTree,
     txAsync: zp.proveTxAsync,
     treeAsync: zp.proveTreeAsync,
+    delegatedDeposit: zp.proveDelegatedDeposit,
+    delegatedDepositAsync: zp.proveDelegatedDepositAsync,
     verify: zp.verify,
 };
 
@@ -152,10 +154,29 @@ class Helpers {
     }
 }
 
+class Keys {
+    static derive(sk) {
+        return zp.keysDerive(sk);
+    }
+}
+
+class DelegatedDepositsData {
+    static async create(
+        deposits,
+        ddParams,
+    ) {
+        return await zp.createDelegatedDepositTxAsync(
+            deposits,
+            ddParams,
+        );
+    }
+}
+
 zp.MerkleTree = MerkleTree;
 zp.TxStorage = TxStorage;
 zp.Params = Params;
 zp.Proof = Proof
+zp.Keys = Keys;
 zp.DelegatedDepositsData = DelegatedDepositsData;
 zp.Helpers = Helpers;
 module.exports = zp;

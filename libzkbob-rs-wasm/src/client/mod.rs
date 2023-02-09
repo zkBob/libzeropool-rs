@@ -6,7 +6,7 @@ use std::{cell::RefCell, convert::TryInto};
 use rayon::prelude::*;
 
 use js_sys::{Array, Promise};
-use libzeropool::{
+use libzkbob_rs::libzeropool::{
     constants,
     fawkes_crypto::{
         core::sizedvec::SizedVec,

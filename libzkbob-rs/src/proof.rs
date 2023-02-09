@@ -1,5 +1,7 @@
 use libzeropool::{
-    circuit::{tree::tree_update, tx::c_transfer},
+    circuit::{
+        delegated_deposit::check_delegated_deposit_batch, tree::tree_update, tx::c_transfer,
+    },
     fawkes_crypto::{
         backend::bellman_groth16::engines::Engine,
         backend::bellman_groth16::prover::{prove, Proof},
@@ -7,6 +9,7 @@ use libzeropool::{
         ff_uint::Num,
     },
     native::{
+        delegated_deposit::{DelegatedDepositBatchPub, DelegatedDepositBatchSec},
         params::PoolParams,
         tree::{TreePub, TreeSec},
         tx::{TransferPub, TransferSec},
