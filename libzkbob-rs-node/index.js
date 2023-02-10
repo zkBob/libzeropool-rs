@@ -120,22 +120,6 @@ const Proof = {
     verify: zp.verify,
 };
 
-class DelegatedDepositsData {
-    static async create(
-        deposits,
-        root,
-        poolId,
-        ddParams,
-    ) {
-        return await zp.createDelegatedDepositTxAsync(
-            deposits,
-            root,
-            poolId,
-            ddParams,
-        );
-    }
-}
-
 class Helpers {
     static outCommitmentHash(outHashes) {
         return zp.helpersOutCommitment(outHashes)
