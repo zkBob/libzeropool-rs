@@ -329,18 +329,15 @@ pub fn create_delegated_deposit_tx_async(mut cx: FunctionContext) -> JsResult<Js
         })
         .collect();
 
-    let channel = cx.channel();
-    let (deferred, promise) = cx.promise();
-
-    rayon::spawn(move || {
-        let tx = DelegatedDepositData::create(&deposits, &*POOL_PARAMS)
-            .expect("Failed to create delegated deposit tx");
-
-        deferred.settle_with(&channel, move |mut cx| {
+    let promise = cx
+        .task(move || {
+            DelegatedDepositData::create(&deposits, &*POOL_PARAMS)
+                .expect("Failed to create delegated deposit tx")
+        })
+        .promise(move |mut cx, tx| {
             tx.to_js(&mut cx)
                 .or_else(|err| cx.throw_error(err.to_string()))
         });
-    });
 
     Ok(promise)
 }

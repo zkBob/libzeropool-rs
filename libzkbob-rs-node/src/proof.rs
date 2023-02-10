@@ -4,7 +4,10 @@ use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::prover::P
 use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::{verify, VK};
 use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
 use libzkbob_rs::libzeropool::POOL_PARAMS;
-use libzkbob_rs::proof::{prove_tree as prove_tree_native, prove_tx as prove_tx_native, prove_delegated_deposit as prove_delegated_deposit_native};
+use libzkbob_rs::proof::{
+    prove_delegated_deposit as prove_delegated_deposit_native, prove_tree as prove_tree_native,
+    prove_tx as prove_tx_native,
+};
 use neon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -26,24 +29,17 @@ pub fn prove_tx_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let tr_pub = neon_serde::from_value(&mut cx, tr_pub_js).unwrap();
     let tr_sec = neon_serde::from_value(&mut cx, tr_sec_js).unwrap();
 
-    let channel = cx.channel();
-    let (deferred, promise) = cx.promise();
-
-    rayon::spawn(move || {
-        let pair = prove_tx_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
-        let proof = SnarkProof {
-            inputs: pair.0,
-            proof: pair.1,
-        };
-
-        deferred.settle_with(&channel, move |mut cx| {
+    let promise = cx
+        .task(move || {
+            let (inputs, proof) = prove_tx_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+            SnarkProof { inputs, proof }
+        })
+        .promise(move |mut cx, proof| {
             neon_serde::to_value(&mut cx, &proof).or_else(|err| cx.throw_error(err.to_string()))
         });
-    });
 
     Ok(promise)
 }
-
 
 pub fn prove_tree_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let params: Arc<Params> = (*cx.argument::<BoxedParams>(0)?).clone();
@@ -52,20 +48,14 @@ pub fn prove_tree_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let tr_pub = neon_serde::from_value(&mut cx, tr_pub_js).unwrap();
     let tr_sec = neon_serde::from_value(&mut cx, tr_sec_js).unwrap();
 
-    let channel = cx.channel();
-    let (deferred, promise) = cx.promise();
-
-    rayon::spawn(move || {
-        let pair = prove_tree_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
-        let proof = SnarkProof {
-            inputs: pair.0,
-            proof: pair.1,
-        };
-
-        deferred.settle_with(&channel, move |mut cx| {
+    let promise = cx
+        .task(move || {
+            let (inputs, proof) = prove_tree_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+            SnarkProof { inputs, proof }
+        })
+        .promise(move |mut cx, proof| {
             neon_serde::to_value(&mut cx, &proof).or_else(|err| cx.throw_error(err.to_string()))
         });
-    });
 
     Ok(promise)
 }
@@ -77,18 +67,15 @@ pub fn prove_delegated_deposit_async(mut cx: FunctionContext) -> JsResult<JsProm
     let d_pub = neon_serde::from_value(&mut cx, d_pub_js).unwrap();
     let d_sec = neon_serde::from_value(&mut cx, d_sec_js).unwrap();
 
-    let channel = cx.channel();
-    let (deferred, promise) = cx.promise();
-
-    rayon::spawn(move || {
-        let (inputs, proof) =
-            prove_delegated_deposit_native(&params.inner, &*POOL_PARAMS, d_pub, d_sec);
-        let proof = SnarkProof { inputs, proof };
-
-        deferred.settle_with(&channel, move |mut cx| {
+    let promise = cx
+        .task(move || {
+            let (inputs, proof) =
+                prove_delegated_deposit_native(&params.inner, &*POOL_PARAMS, d_pub, d_sec);
+            SnarkProof { inputs, proof }
+        })
+        .promise(move |mut cx, proof| {
             neon_serde::to_value(&mut cx, &proof).or_else(|err| cx.throw_error(err.to_string()))
         });
-    });
 
     Ok(promise)
 }
