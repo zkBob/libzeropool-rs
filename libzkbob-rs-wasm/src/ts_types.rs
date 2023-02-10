@@ -281,7 +281,7 @@ extern "C" {
     pub type IAddressComponents;
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexedNote {
     pub index: u64,
     pub note: NativeNote<Fr>,

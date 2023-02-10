@@ -4,13 +4,31 @@ use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
+use thiserror::Error;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
 use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter}; 
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("Incorrect memo length at index {0}: no prefix")]
+    NoPrefix(u64),
+    #[error("Incorrect memo prefix at index {0}: got {1} items, max allowed {2}")]
+    IncorrectPrefix(u64, u32, u32),
+}
+
+impl ParseError {
+    pub fn index(&self) -> u64 {
+        match *self {
+            ParseError::NoPrefix(idx)  => idx,
+            ParseError::IncorrectPrefix(idx,  _, _)  => idx,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct StateUpdate {
     #[serde(rename = "newLeafs")]
     pub new_leafs: Vec<(u64, Vec<Hash<Fr>>)>,
@@ -22,7 +40,7 @@ pub struct StateUpdate {
     pub new_notes: Vec<Vec<(u64, Note<Fr>)>>
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct DecMemo {
     pub index: u64,
     pub acc: Option<Account<Fr>>,
@@ -34,7 +52,7 @@ pub struct DecMemo {
     pub tx_hash: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Debug)]
 pub struct ParseResult {
     #[serde(rename = "decryptedMemos")]
     pub decrypted_memos: Vec<DecMemo>,
@@ -76,7 +94,7 @@ impl TxParser {
         let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
 
         let (parse_results, parse_errors): (Vec<_>, Vec<_>) = vec_into_iter(txs)
-            .map(|tx| -> Result<ParseResult, String> {
+            .map(|tx| -> Result<ParseResult, ParseError> {
                 let IndexedTx{index, memo, commitment} = tx;
                 let memo = hex::decode(memo).unwrap();
                 let commitment = hex::decode(commitment).unwrap();
@@ -106,7 +124,15 @@ impl TxParser {
                 .unchecked_into::<ParseTxsResult>();
             Ok(parse_result)
         } else {
-            Err(js_err!("Some txs ({}) cannot be processed", parse_errors.len()))
+            let errors: Vec<u64> = parse_errors
+                .into_iter()
+                .map(|err| -> u64 {
+                    let err = err.unwrap_err();
+                    err.index()
+                })
+                .collect();
+
+            Err(js_err!("The following txs cannot be processed: {:?}", errors))
         }
     }
 }
@@ -118,7 +144,10 @@ pub fn parse_tx(
     tx_hash: Option<&Vec<u8>>,
     eta: &Num<Fr>,
     params: &PoolParams
-) -> Result<ParseResult, String> {
+) -> Result<ParseResult, ParseError> {
+    if memo.len() < 4 {
+        return Err(ParseError::NoPrefix(index))
+    }
 
     // Special case: transaction contains delegated deposits
     if memo[0..4] == DELEGATED_DEPOSIT_MAGIC {
@@ -264,6 +293,6 @@ pub fn parse_tx(
             }
         }
     } else {
-        Err(format!("Incorrect memo: got {} items, max allowed {}", num_hashes, constants::OUT + 1))
+        Err(ParseError::IncorrectPrefix(index, num_hashes, (constants::OUT + 1) as u32))
     }
 }
