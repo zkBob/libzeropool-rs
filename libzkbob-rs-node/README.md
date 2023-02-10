@@ -6,10 +6,10 @@ This project was bootstrapped by [create-neon](https://www.npmjs.com/package/cre
 
 Installing libzkbob-rs-node requires a [supported version of Node and Rust](https://github.com/neon-bindings/neon#platform-support).
 
-You can install the project with npm. In the project directory, run:
+You can install the project with yarn. In the project directory, run:
 
 ```sh
-$ npm install
+$ yarn install
 ```
 
 This fully installs the project, including installing any dependencies and running the build.
@@ -19,7 +19,7 @@ This fully installs the project, including installing any dependencies and runni
 If you have already installed the project and only want to run the build, run:
 
 ```sh
-$ npm run build
+$ yarn build
 ```
 
 This command uses the [cargo-cp-artifact](https://github.com/neon-bindings/cargo-cp-artifact) utility to run the Rust build and copy the built library into `./index.node`.
@@ -44,15 +44,23 @@ console.log('Proof', proof);
 
 In the project directory, you can run:
 
-### `npm install`
+### `yarn install`
 
-Installs the project, including running `npm run build`.
+Installs the project, including running `yarn build`.
 
-### `npm build`
+### `yarn build`
 
 Builds the Node addon (`index.node`) from source.
 
-### `npm test`
+### `yarn test`
 
 Runs the unit tests by calling `cargo test`. You can learn more about [adding tests to your Rust code](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) from the [Rust book](https://doc.rust-lang.org/book/).
 
+## Testing suite
+
+You can find the library usage example with few tests in `test.js` file
+You can launch it with the following command after building the local library:
+
+```sh
+$ node test.js
+```
