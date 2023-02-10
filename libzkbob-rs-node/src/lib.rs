@@ -48,8 +48,13 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     cx.export_function("proveTx", proof::prove_tx)?;
     cx.export_function("proveTree", proof::prove_tree)?;
+    cx.export_function("proveDelegatedDeposit", proof::prove_delegated_deposit)?;
     cx.export_function("proveTxAsync", proof::prove_tx_async)?;
     cx.export_function("proveTreeAsync", proof::prove_tree_async)?;
+    cx.export_function(
+        "proveDelegatedDepositAsync",
+        proof::prove_delegated_deposit_async,
+    )?;
     cx.export_function("verify", proof::verify_proof)?;
 
     cx.export_function("merkleNew", merkle::merkle_new)?;
@@ -83,12 +88,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("helpersParseDelta", helpers::parse_delta_string)?;
     cx.export_function("helpersNumToStr", helpers::num_to_str)?;
     cx.export_function("helpersStrToNum", helpers::str_to_num)?;
-
-    cx.export_function("proveDelegatedDeposit", proof::prove_delegated_deposit)?;
-    cx.export_function(
-        "proveDelegatedDepositAsync",
-        proof::prove_delegated_deposit_async,
-    )?;
+    
     cx.export_function("keysDerive", keys::keys_derive)?;
 
     cx.export_function(

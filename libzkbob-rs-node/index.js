@@ -113,9 +113,9 @@ const Params = {
 const Proof = {
     tx: zp.proveTx,
     tree: zp.proveTree,
+    delegatedDeposit: zp.proveDelegatedDeposit,
     txAsync: zp.proveTxAsync,
     treeAsync: zp.proveTreeAsync,
-    delegatedDeposit: zp.proveDelegatedDeposit,
     delegatedDepositAsync: zp.proveDelegatedDepositAsync,
     verify: zp.verify,
 };
@@ -176,7 +176,7 @@ zp.MerkleTree = MerkleTree;
 zp.TxStorage = TxStorage;
 zp.Params = Params;
 zp.Proof = Proof
+zp.Helpers = Helpers;
 zp.Keys = Keys;
 zp.DelegatedDepositsData = DelegatedDepositsData;
-zp.Helpers = Helpers;
 module.exports = zp;
