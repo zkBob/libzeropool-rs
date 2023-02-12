@@ -164,23 +164,37 @@ declare class TransactionData {
     commitment_root: string;
     out_hashes: string[];
 }
+interface MemoDelegatedDeposit {
+    id: string | number;
+    receiver_d: string | number;
+    receiver_p: string | number;
+    denominated_amount: string | number;
+}
 
-interface FullDelegatedDeposit {
-    id: string | number,
-    owner: string | number,
-    receiver_d: string | number,
-    receiver_p: string | number,
-    denominated_amount: string | number,
-    denominated_fee: string | number,
-    expired: string | number,
+interface DelegatedDeposit {
+    d: string;
+    p_d: string;
+    b: string;
+}
+interface DelegatedDepositBatchPub {
+    keccak_sum: string;
+}
+
+interface DelegatedDepositBatchSec {
+    deposits: DelegatedDeposit[];
 }
 
 declare class DelegatedDepositsData {
     public: DelegatedDepositBatchPub;
     secret: DelegatedDepositBatchSec;
     memo: Buffer;
+    out_commitment_hash: string;
 
     static create(
-        deposits: FullDelegatedDeposit[],
+        deposits: MemoDelegatedDeposit[],
     ): Promise<DelegatedDepositsData>;
 }
+
+declare function delegatedDepositsToCommitment(
+    deposits: MemoDelegatedDeposit[],
+): string;

@@ -7,7 +7,6 @@ use libzeropool::{
     native::{
         boundednum::BoundedNum,
         delegated_deposit::{DelegatedDeposit, DelegatedDepositBatchPub, DelegatedDepositBatchSec},
-        note::Note,
         params::PoolParams,
         tx::out_commitment_hash,
     },
@@ -66,48 +65,17 @@ impl<Fr: PrimeField> MemoDelegatedDeposit<Fr> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(bound(serialize = "", deserialize = ""))]
-pub struct FullDelegatedDeposit<Fr: PrimeField> {
-    pub id: u64,
-    #[serde(with = "hex")]
-    pub owner: Vec<u8>,
-    pub receiver_d: BoundedNum<Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
-    pub receiver_p: Num<Fr>,
-    pub denominated_amount: u64,
-    pub denominated_fee: u64,
-    pub expired: u64,
-}
-
-impl<Fr: PrimeField> FullDelegatedDeposit<Fr> {
-    pub fn to_delegated_deposit(&self) -> DelegatedDeposit<Fr> {
-        DelegatedDeposit {
-            d: self.receiver_d,
-            p_d: self.receiver_p,
-            b: BoundedNum::new(Num::from(self.denominated_amount)),
-        }
-    }
-
-    pub fn to_memo_delegated_deposit(&self) -> MemoDelegatedDeposit<Fr> {
-        MemoDelegatedDeposit {
-            id: self.id,
-            receiver_d: self.receiver_d,
-            receiver_p: self.receiver_p,
-            denominated_amount: self.denominated_amount - self.denominated_fee,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct DelegatedDepositData<Fr: PrimeField> {
     pub public: DelegatedDepositBatchPub<Fr>,
     pub secret: DelegatedDepositBatchSec<Fr>,
     pub memo: Vec<u8>,
+    pub out_commitment_hash: Num<Fr>,
 }
 
 impl<Fr: PrimeField> DelegatedDepositData<Fr> {
     pub fn create<P>(
-        deposits: &[FullDelegatedDeposit<P::Fr>],
+        deposits: &[MemoDelegatedDeposit<P::Fr>],
         params: &P,
     ) -> Result<Self, CreateTxError>
     where
@@ -130,51 +98,46 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
         let zero_note = zero_note();
         let zero_note_hash = zero_note.hash(params);
 
-        let mut total_fee = Num::<P::Fr>::ZERO;
-        let out_notes = deposits
+        let full_deposits = deposits
             .iter()
-            .map(|d| {
-                total_fee += Num::from(d.denominated_fee);
-                d.to_delegated_deposit().to_note()
-            })
-            .chain((0..).map(|_| zero_note))
+            .map(MemoDelegatedDeposit::to_delegated_deposit)
+            .chain(std::iter::repeat(DelegatedDeposit {
+                d: BoundedNum::ZERO,
+                p_d: Num::ZERO,
+                b: BoundedNum::ZERO,
+            }))
             .take(constants::DELEGATED_DEPOSITS_NUM)
-            .collect::<SizedVec<Note<P::Fr>, { constants::DELEGATED_DEPOSITS_NUM }>>();
+            .collect::<Vec<_>>();
 
-        let out_note_hashes = out_notes.iter().map(|n| n.hash(params));
-        let out_hashes: SizedVec<Num<P::Fr>, { constants::OUT + 1 }> = [zero_account_hash]
-            .iter()
-            .copied()
-            .chain(out_note_hashes)
-            .chain((0..).map(|_| zero_note_hash))
-            .take(constants::OUT + 1)
-            .collect();
+        let out_hashes: SizedVec<Num<P::Fr>, { constants::OUT + 1 }> =
+            std::iter::once(zero_account_hash)
+                .chain(full_deposits.iter().map(|n| n.to_note().hash(params)))
+                .chain(std::iter::repeat(zero_note_hash))
+                .take(constants::OUT + 1)
+                .collect();
 
         let out_commitment_hash = out_commitment_hash(out_hashes.as_slice(), params);
 
-        let mut data_for_keccak = Vec::new();
-        data_for_keccak.extend_from_slice(&out_commitment_hash.to_uint().0.to_big_endian());
-        data_for_keccak.extend_from_slice(&zero_account_hash.to_uint().0.to_big_endian());
-        for deposit in deposits {
-            let deposit = deposit.to_delegated_deposit();
-            data_for_keccak.extend_from_slice(&deposit.d.to_num().to_uint().0.to_big_endian());
-            data_for_keccak.extend_from_slice(&deposit.p_d.to_uint().0.to_big_endian());
-            data_for_keccak.extend_from_slice(&deposit.b.to_num().to_uint().0.to_big_endian());
-        }
-
-        let keccak_sum =
-            Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&keccak256(&data_for_keccak))));
-
-        let public = DelegatedDepositBatchPub {
-            keccak_sum, // keccak256(out_commitment_hash + account + deposits)
+        // keccak256(out_commitment_hash + deposits)
+        let keccak_sum = {
+            let mut data_for_keccak = Vec::new();
+            data_for_keccak.extend_from_slice(&out_commitment_hash.to_uint().0.to_big_endian());
+            for deposit in full_deposits {
+                data_for_keccak
+                    .extend_from_slice(&deposit.d.to_num().to_uint().0.to_big_endian()[22..]);
+                data_for_keccak.extend_from_slice(&deposit.p_d.to_uint().0.to_big_endian());
+                data_for_keccak
+                    .extend_from_slice(&deposit.b.to_num().to_uint().0.to_big_endian()[24..]);
+            }
+            Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&keccak256(&data_for_keccak))))
         };
 
+        let public = DelegatedDepositBatchPub { keccak_sum };
         let secret = DelegatedDepositBatchSec::<P::Fr> {
-            out_commitment_hash,
             deposits: deposits
                 .iter()
-                .map(FullDelegatedDeposit::to_delegated_deposit)
-                .chain((0..).map(|_| DelegatedDeposit {
+                .map(MemoDelegatedDeposit::to_delegated_deposit)
+                .chain(std::iter::repeat(DelegatedDeposit {
                     d: BoundedNum::new(Num::ZERO),
                     p_d: Num::ZERO,
                     b: BoundedNum::new(Num::ZERO),
@@ -184,12 +147,12 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
         };
 
         let memo_data = {
-            let memo_size = 8 + 256 + 4 + 32 + 94 * deposits.len();
+            let memo_size = 4 + 58 * deposits.len();
             let mut data = Vec::with_capacity(memo_size);
             data.extend_from_slice(&DELEGATED_DEPOSIT_MAGIC);
 
             for deposit in deposits {
-                deposit.to_memo_delegated_deposit().write(&mut data)?;
+                deposit.write(&mut data)?;
             }
 
             data
@@ -199,6 +162,7 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
             public,
             secret,
             memo: memo_data,
+            out_commitment_hash,
         })
     }
 }
@@ -207,29 +171,50 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
 mod tests {
     use std::str::FromStr;
 
-    use libzeropool::POOL_PARAMS;
+    use libzeropool::{
+        fawkes_crypto::backend::bellman_groth16::{engines::Bn256, verifier::verify, Parameters},
+        POOL_PARAMS,
+    };
 
     use super::*;
+    use crate::proof::prove_delegated_deposit;
 
     #[test]
-    #[ignore]
-    fn test_create_delegated_deposit() {
+    fn test_delegated_deposit_data_create_full() {
+        use libzeropool::{
+            circuit::delegated_deposit::{
+                check_delegated_deposit_batch, CDelegatedDepositBatchPub, CDelegatedDepositBatchSec,
+            },
+            fawkes_crypto::{
+                circuit::cs::{DebugCS, CS},
+                core::signal::Signal,
+            },
+            POOL_PARAMS,
+        };
+
         let d = DelegatedDepositData::create(
-            &[FullDelegatedDeposit {
+            &[MemoDelegatedDeposit {
                 id: 0,
-                owner: vec![0; 20],
                 receiver_d: BoundedNum::new(Num::from_str("254501365180353910541213").unwrap()),
                 receiver_p: Num::from_str(
                     "1518610811376102436745659088373274425162017815402814928120935968131387562269",
                 )
                 .unwrap(),
                 denominated_amount: 500000000,
-                denominated_fee: 0,
-                expired: 1675838609,
             }],
             &*POOL_PARAMS,
-        );
+        )
+        .unwrap();
 
-        assert!(true);
+        let ref mut cs = DebugCS::rc_new();
+        let signal_pub = CDelegatedDepositBatchPub::alloc(cs, Some(&d.public));
+        let signal_sec = CDelegatedDepositBatchSec::alloc(cs, Some(&d.secret));
+        let mut n_constraints = cs.borrow().num_gates();
+        check_delegated_deposit_batch(&signal_pub, &signal_sec, &*POOL_PARAMS);
+        n_constraints = cs.borrow().num_gates() - n_constraints;
+        println!(
+            "check_delegated_deposit_batch constraints = {}",
+            n_constraints
+        );
     }
 }
