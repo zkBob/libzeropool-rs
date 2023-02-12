@@ -195,6 +195,10 @@ pub fn parse_tx(
             decrypted_memos: vec![DecMemo {
                 index,
                 in_notes: in_notes_indexed,
+                tx_hash: match tx_hash {
+                    Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
+                    _ => None,
+                },
                 ..Default::default()
             }],
             state_update: StateUpdate {
