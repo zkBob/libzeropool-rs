@@ -5,6 +5,7 @@ use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
 use thiserror::Error;
+use web_sys::console;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -124,15 +125,16 @@ impl TxParser {
                 .unchecked_into::<ParseTxsResult>();
             Ok(parse_result)
         } else {
-            let errors: Vec<u64> = parse_errors
+            let errors: Vec<_> = parse_errors
                 .into_iter()
-                .map(|err| -> u64 {
+                .map(|err| -> ParseError {
                     let err = err.unwrap_err();
-                    err.index()
+                    console::log_1(&format!("[WASM TxParser] ERROR: {}", err.to_string()).into());
+                    err
                 })
                 .collect();
-
-            Err(js_err!("The following txs cannot be processed: {:?}", errors))
+            let all_errs: Vec<u64> = errors.into_iter().map(|err| err.index()).collect();
+            Err(js_err!("The following txs cannot be processed: {:?}", all_errs))
         }
     }
 }
