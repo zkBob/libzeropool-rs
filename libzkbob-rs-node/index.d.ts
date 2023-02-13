@@ -89,20 +89,6 @@ export interface TreeSec {
     prev_leaf: string;
 }
 
-interface DelegatedDeposit {
-    d: string;
-    p_d: string;
-    b: string;
-}
-
-interface DelegatedDepositBatchPub {
-    keccak_sum: string;
-}
-
-interface DelegatedDepositBatchSec {
-    deposits: DelegatedDeposit[];
-}
-
 export interface MerkleProof {
     sibling: string[];
     path: boolean[];
@@ -179,6 +165,20 @@ interface MemoDelegatedDeposit {
     receiver_d: string | number;
     receiver_p: string | number;
     denominated_amount: string | number;
+}
+
+interface DelegatedDeposit {
+    d: string;
+    p_d: string;
+    b: string;
+}
+
+interface DelegatedDepositBatchPub {
+    keccak_sum: string;
+}
+
+interface DelegatedDepositBatchSec {
+    deposits: DelegatedDeposit[];
 }
 
 declare class DelegatedDepositsData {
