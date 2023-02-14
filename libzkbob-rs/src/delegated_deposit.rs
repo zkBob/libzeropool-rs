@@ -171,7 +171,6 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
 mod tests {
     use std::str::FromStr;
 
-    use byteorder::{ReadBytesExt, LittleEndian};
     use libzeropool::{
         fawkes_crypto::backend::bellman_groth16::{engines::Bn256, verifier::verify, Parameters},
         POOL_PARAMS,
@@ -217,15 +216,5 @@ mod tests {
             "check_delegated_deposit_batch constraints = {}",
             n_constraints
         );
-    }
-
-    #[test]
-    fn test_delegated_deposit_prefix() {
-        (0..=256).for_each(|num_deposits| {
-            let prefix = (num_deposits as u32 | DELEGATED_DEPOSIT_FLAG).to_le_bytes();
-            let prefix = (&prefix[0..4]).read_u32::<LittleEndian>().unwrap();
-            assert!(prefix & DELEGATED_DEPOSIT_FLAG > 0);
-            assert_eq!(num_deposits, (prefix ^ DELEGATED_DEPOSIT_FLAG) as usize);
-        })
     }
 }

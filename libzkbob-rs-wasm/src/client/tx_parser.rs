@@ -151,10 +151,10 @@ pub fn parse_tx(
         return Err(ParseError::NoPrefix(index))
     }
 
-    let prefix = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
+    let (is_delegated_deposit, num_items) = parse_prefix(&memo);
     // Special case: transaction contains delegated deposits
-    if prefix & DELEGATED_DEPOSIT_FLAG > 0 {
-        let num_deposits = (prefix ^ DELEGATED_DEPOSIT_FLAG) as usize;
+    if is_delegated_deposit {
+        let num_deposits = num_items as usize;
 
         let delegated_deposits = memo[4..]
             .chunks(MEMO_DELEGATED_DEPOSIT_SIZE)
@@ -212,7 +212,7 @@ pub fn parse_tx(
     }
 
     // regular case: simple transaction memo
-    let num_hashes = prefix;
+    let num_hashes = num_items;
     if num_hashes <= (constants::OUT + 1) as u32 {
         let hashes = (&memo[4..])
             .chunks(32)
@@ -300,5 +300,14 @@ pub fn parse_tx(
         }
     } else {
         Err(ParseError::IncorrectPrefix(index, num_hashes, (constants::OUT + 1) as u32))
+    }
+}
+
+fn parse_prefix(memo: &[u8]) -> (bool, u32) {
+    let prefix = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
+    let is_delegated_deposit = prefix & DELEGATED_DEPOSIT_FLAG > 0;
+    match is_delegated_deposit {
+        true => (true, (prefix ^ DELEGATED_DEPOSIT_FLAG)),
+        false => (false, prefix)
     }
 }
