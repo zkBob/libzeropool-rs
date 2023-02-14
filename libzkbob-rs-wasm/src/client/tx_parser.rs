@@ -1,6 +1,6 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
-use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_MAGIC};
+use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_FLAG};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
@@ -151,10 +151,10 @@ pub fn parse_tx(
         return Err(ParseError::NoPrefix(index))
     }
 
+    let prefix = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
     // Special case: transaction contains delegated deposits
-    if memo[0..4] == DELEGATED_DEPOSIT_MAGIC {
-        let num_deposits =
-            (memo.len() - DELEGATED_DEPOSIT_MAGIC.len()) / MEMO_DELEGATED_DEPOSIT_SIZE;
+    if prefix & DELEGATED_DEPOSIT_FLAG > 0 {
+        let num_deposits = (prefix ^ DELEGATED_DEPOSIT_FLAG) as usize;
 
         let delegated_deposits = memo[4..]
             .chunks(MEMO_DELEGATED_DEPOSIT_SIZE)
@@ -212,7 +212,7 @@ pub fn parse_tx(
     }
 
     // regular case: simple transaction memo
-    let num_hashes = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
+    let num_hashes = prefix;
     if num_hashes <= (constants::OUT + 1) as u32 {
         let hashes = (&memo[4..])
             .chunks(32)

@@ -18,7 +18,7 @@ use crate::{
     utils::{keccak256, zero_account, zero_note},
 };
 
-pub const DELEGATED_DEPOSIT_MAGIC: [u8; 4] = [0xff; 4];
+pub const DELEGATED_DEPOSIT_FLAG: u32 = 0x01000000;
 pub const MEMO_DELEGATED_DEPOSIT_SIZE: usize = 8 + constants::DIVERSIFIER_SIZE_BITS / 8 + 32 + 8;
 
 pub struct MemoDelegatedDeposit<Fr: PrimeField> {
@@ -149,7 +149,7 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
         let memo_data = {
             let memo_size = 4 + 58 * deposits.len();
             let mut data = Vec::with_capacity(memo_size);
-            data.extend_from_slice(&DELEGATED_DEPOSIT_MAGIC);
+            data.extend_from_slice(&(deposits.len() as u32 | DELEGATED_DEPOSIT_FLAG).to_le_bytes());
 
             for deposit in deposits {
                 deposit.write(&mut data)?;
@@ -171,6 +171,7 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
 mod tests {
     use std::str::FromStr;
 
+    use byteorder::{ReadBytesExt, LittleEndian};
     use libzeropool::{
         fawkes_crypto::backend::bellman_groth16::{engines::Bn256, verifier::verify, Parameters},
         POOL_PARAMS,
@@ -216,5 +217,15 @@ mod tests {
             "check_delegated_deposit_batch constraints = {}",
             n_constraints
         );
+    }
+
+    #[test]
+    fn test_delegated_deposit_prefix() {
+        (0..=256).for_each(|num_deposits| {
+            let prefix = (num_deposits as u32 | DELEGATED_DEPOSIT_FLAG).to_le_bytes();
+            let prefix = (&prefix[0..4]).read_u32::<LittleEndian>().unwrap();
+            assert!(prefix & DELEGATED_DEPOSIT_FLAG > 0);
+            assert_eq!(num_deposits, (prefix ^ DELEGATED_DEPOSIT_FLAG) as usize);
+        })
     }
 }
