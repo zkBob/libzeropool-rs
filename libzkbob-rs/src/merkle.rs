@@ -195,9 +195,9 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
     }
 
     // The common method which can be used for full or partial tree update
-    // Supposed that partial tree can ommit his left part and should have no other gaps
+    // Supposed that partial tree can omit its left part and should have no other gaps
     // Siblings are tree nodes to restore correct tree root in case of left tree part absence
-    // Sibligs for concrete index should be generated with MerkleTree::get_left_siblings method
+    // Siblings for concrete index should be generated with MerkleTree::get_left_siblings method
     // The leafs or commitments MUST be started with an index which was used to generating siblings,
     //  e.g. if siblings were generated for index 1024, the commitment@8 or leaf@1024 must be presented
     //  !otherwise tree becomes corrupted!
@@ -371,60 +371,6 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
         }
     }
 
-    // Calculate tree node (from the tree root to the leafs level)
-    // Returns None if there is no node and calculation is impossible
-    // The calculation could be impossible in case of tree part absence for example
-    fn get_with_next_index_recursive(&self, height: u32, index: u64, next_index: u64) -> Option<Hash<P::Fr>> {
-        let node_left = index * (1 << height);
-        let node_right = (index + 1) * (1 << height);
-        if node_left >= next_index {
-            //print!("💬[{}.{}]  ", height, index);
-            return Some(self.default_hashes[height as usize]);
-        }
-
-        let mut node = None;
-        if node_right <= next_index {
-            // get the actual value from the tree in case the current subtree
-            // placed inside our range [0..next_index]
-            node = self.get_opt(height, index);
-        }
-        match node {
-            Some(val) => {
-                //print!("✅[{}.{}]  ", height, index);
-                Some(val)
-            },
-            _ => {
-                if height == 0 {
-                    // We went down to the leaves level but the node is absence
-                    // Check transaction existence (each transaction should have account leaf)
-                    let first_tx_leaf_index = (index >> constants::OUTPLUSONELOG) << constants::OUTPLUSONELOG;
-                    if self.get_opt(0, first_tx_leaf_index).is_some() {
-                        return Some(self.zero_note_hashes[height as usize]);
-                    }
-
-                    // More likely the tree is not filled here (partial tree case)
-                    return None;
-                }
-
-                let left_child = self.get_with_next_index_recursive(height - 1, index << 1, next_index);
-                let right_child = self.get_with_next_index_recursive(height - 1, (index << 1) + 1, next_index);
-
-                if left_child.is_none() || right_child.is_none() {
-                    return None
-                }
-
-                //print!("🧮[{}.{}]={}.{}+{}.{}  ", height, index, height - 1, index << 1, height - 1, (index << 1) + 1);
-
-                let pair = [left_child?, right_child?];
-                let hash = poseidon(pair.as_ref(), self.params.compress());
-
-                //println!("");
-
-                Some(hash)
-            }
-        }
-    }
-
     pub fn last_leaf(&self) -> Hash<P::Fr> {
         // todo: can last leaf be an zero note?
         match self.get_opt(0, self.next_index.saturating_sub(1)) {
@@ -439,17 +385,31 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
 
     // Get root at specified index (without rollback)
     // This method can be used for tree integrity check
-    // index is a position within Merkle tree level 0
-    // and should point to the first transaction leaf
-    //  (to be a multiple of constants::OUT + 1)
+    // `index` is a position within Merkle tree level 0
+    // it should be <= next_index
     pub fn get_root_at(&self, index: u64) -> Option<Hash<P::Fr>> {
-        if index & constants::OUT as u64 != 0 ||
-            index > self.next_index()
-        {
+        if index > self.next_index() {
             return None;
         }
 
-        self.get_with_next_index_recursive(constants::HEIGHT as u32, 0, index)
+        let non_zero_sibling_height = (index.trailing_zeros() as usize).min(constants::HEIGHT);
+        let mut hash = self.default_hashes[non_zero_sibling_height];
+
+        for height in non_zero_sibling_height..constants::HEIGHT {
+            let sibling_index = (index >> height) ^ 1;
+            let is_right = sibling_index & 1 != 0;
+
+            let pair = if is_right {
+                [hash, self.default_hashes[height]]
+            } else {
+                // node at `sibling_index` is always expected to be present
+                // if it is not, then the tree is corrupted
+                [self.get_opt(height as u32, sibling_index)?, hash]
+            };
+
+            hash = poseidon(pair.as_ref(), self.params.compress());
+        }
+        Some(hash)
     }
 
     pub fn get_root_after_virtual<I>(
