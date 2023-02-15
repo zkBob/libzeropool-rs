@@ -1,4 +1,4 @@
-use libzeropool::native::note::Note as NativeNote;
+use libzkbob_rs::libzeropool::native::note::Note as NativeNote;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -103,6 +103,11 @@ export interface VK {
     gamma: string[][]; // G2
     delta: string[][]; // G2
     ic: string[][];    // G1[]
+}
+
+export interface IAddressComponents {
+    d: string;
+    p_d: string;
 }
 
 export interface ITxBaseFields {
@@ -271,9 +276,12 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "ParseTxsColdStorageResult")]
     pub type ParseTxsColdStorageResult;
+
+    #[wasm_bindgen(typescript_type = "IAddressComponents")]
+    pub type IAddressComponents;
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexedNote {
     pub index: u64,
     pub note: NativeNote<Fr>,

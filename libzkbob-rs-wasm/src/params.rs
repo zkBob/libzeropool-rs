@@ -1,4 +1,4 @@
-use libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
 use wasm_bindgen::prelude::*;
 
 use crate::Engine;
