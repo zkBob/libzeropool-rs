@@ -76,7 +76,7 @@ pub fn get_constants() -> Constants {
 
 #[wasm_bindgen(js_name = "validateAddress")]
 pub fn validate_address(address: &str) -> bool {
-    parse_address::<PoolParams>(address).is_ok()
+    parse_address::<PoolParams>(address, &POOL_PARAMS).is_ok()
 }
 
 #[wasm_bindgen(js_name = "assembleAddress")]
@@ -90,7 +90,7 @@ pub fn assemble_address(d: &str, p_d: &str) -> String {
 
 #[wasm_bindgen(js_name = "parseAddress")]
 pub fn parse_address_(address: &str) -> IAddressComponents {
-    let (d, p_d) = parse_address::<PoolParams>(address).unwrap();
+    let (d, p_d) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
 
     #[derive(Serialize)]
     struct Address {
