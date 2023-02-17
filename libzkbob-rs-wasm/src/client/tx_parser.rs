@@ -179,7 +179,7 @@ pub fn parse_tx(
             })
             .collect::<Vec<_>>();
 
-        let in_notes = in_notes_indexed.iter().map(|n| (n.index, n.note)).collect();
+        let in_notes: Vec<_> = in_notes_indexed.iter().map(|n| (n.index, n.note)).collect();
 
         let hashes = [zero_account().hash(params)]
             .iter()
@@ -191,21 +191,33 @@ pub fn parse_tx(
             )
             .collect();
 
-        let parse_result = ParseResult {
-            decrypted_memos: vec![DecMemo {
-                index,
-                in_notes: in_notes_indexed,
-                tx_hash: match tx_hash {
-                    Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
-                    _ => None,
-                },
-                ..Default::default()
-            }],
-            state_update: StateUpdate {
-                new_leafs: vec![(index, hashes)],
-                new_notes: vec![in_notes],
-                ..Default::default()
-            },
+        let parse_result = {
+            if !in_notes.is_empty() {
+                ParseResult {
+                    decrypted_memos: vec![DecMemo {
+                        index,
+                        in_notes: in_notes_indexed,
+                        tx_hash: match tx_hash {
+                            Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
+                            _ => None,
+                        },
+                        ..Default::default()
+                    }],
+                    state_update: StateUpdate {
+                        new_leafs: vec![(index, hashes)],
+                        new_notes: vec![in_notes],
+                        ..Default::default()
+                    },
+                }
+            } else {
+                ParseResult {
+                    state_update: StateUpdate {
+                        new_commitments: vec![(index, Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment))))],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            }
         };
 
         return Ok(parse_result);
