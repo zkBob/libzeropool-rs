@@ -171,7 +171,7 @@ where
 
     pub fn is_own_address(&self, address: &str) -> bool {
         let mut result = false;
-        if let Ok((d, p_d)) = parse_address::<P>(address) {
+        if let Ok((d, p_d)) = parse_address::<P>(address, &self.params) {
             let own_p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
             result = own_p_d == p_d;
         }
@@ -333,7 +333,7 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d) = parse_address::<P>(&dest.to)?;
+                        let (to_d, to_p_d) = parse_address::<P>(&dest.to, &self.params)?;
 
                         output_value += dest.amount.to_num();
 

@@ -3,7 +3,7 @@ use libzeropool::{
     constants,
     fawkes_crypto::{
         borsh::{BorshDeserialize, BorshSerialize},
-        ff_uint::Num,
+        ff_uint::Num, native::ecc::EdwardsPoint,
     },
     native::boundednum::BoundedNum,
     native::params::PoolParams,
@@ -16,6 +16,8 @@ const ADDR_LEN: usize = 46;
 pub enum AddressParseError {
     #[error("Invalid checksum")]
     InvalidChecksum,
+    #[error("Pd does not belongs prime subgroup")]
+    InvalidNumber,
     #[error("Decode error: {0}")]
     Base58DecodeError(#[from] bs58::decode::Error),
     #[error("Deserialization error: {0}")]
@@ -24,6 +26,7 @@ pub enum AddressParseError {
 
 pub fn parse_address<P: PoolParams>(
     address: &str,
+    params: &P,
 ) -> Result<
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
@@ -45,7 +48,10 @@ pub fn parse_address<P: PoolParams>(
     let d = BoundedNum::try_from_slice(&bytes[0..10])?;
     let p_d = Num::try_from_slice(&bytes[10..42])?;
 
-    Ok((d, p_d))
+    match EdwardsPoint::subgroup_decompress(p_d, params.jubjub()) {
+        Some(_) => Ok((d, p_d)),
+        None => Err(AddressParseError::InvalidNumber)
+    }
 }
 
 pub fn format_address<P: PoolParams>(

@@ -88,6 +88,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("helpersParseDelta", helpers::parse_delta_string)?;
     cx.export_function("helpersNumToStr", helpers::num_to_str)?;
     cx.export_function("helpersStrToNum", helpers::str_to_num)?;
+    cx.export_function("helpersIsInPrimeSubgroup", helpers::is_in_prime_subgroup)?;
     
     cx.export_function("keysDerive", keys::keys_derive)?;
 

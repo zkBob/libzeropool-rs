@@ -131,6 +131,7 @@ declare class Helpers {
     static parseDelta(delta: string): { v: string, e: string, index: string, poolId: string }
     static numToStr(num: Buffer): string
     static strToNum(str: string): Buffer
+    static isInPrimeSubgroup(num: Buffer): boolean
 }
 
 declare class Keys {
