@@ -136,6 +136,10 @@ class Helpers {
     static strToNum(str) {
         return zp.helpersStrToNum(str)
     }
+
+    static isInPrimeSubgroup(num) {
+        return zp.helpersIsInPrimeSubgroup(num)
+    }
 }
 
 class Keys {

@@ -4,6 +4,8 @@ use std::str::FromStr;
 use libzkbob_rs::libzeropool::constants::OUT;
 use libzkbob_rs::libzeropool::fawkes_crypto::borsh::{BorshDeserialize, BorshSerialize};
 use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
+use libzkbob_rs::libzeropool::fawkes_crypto::native::ecc::EdwardsPoint;
+use libzkbob_rs::libzeropool::native::params::PoolParams;
 use libzkbob_rs::libzeropool::native::tx::{out_commitment_hash, parse_delta};
 use libzkbob_rs::libzeropool::POOL_PARAMS;
 
@@ -80,4 +82,15 @@ pub fn str_to_num(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     let buf = JsBuffer::external(&mut cx, vec);
 
     Ok(buf)
+}
+
+pub fn is_in_prime_subgroup(mut cx: FunctionContext) -> JsResult<JsBoolean> {
+    let p: Num<Fr> = {
+        let buffer = cx.argument::<JsBuffer>(0)?;
+        Num::try_from_slice(buffer.as_slice(&cx)).unwrap()
+    };
+    match EdwardsPoint::subgroup_decompress(p, &*POOL_PARAMS.jubjub()) {
+        Some(_) => Ok(cx.boolean(true)),
+        None => Ok(cx.boolean(false))
+    }
 }
