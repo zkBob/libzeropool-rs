@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher::{self, ECPointsFormat}, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
+use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, ec_points::ECPointsFormat, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
 use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_FLAG};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
