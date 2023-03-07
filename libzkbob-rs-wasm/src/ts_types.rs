@@ -1,5 +1,5 @@
 use fawkes_crypto::ff_uint::Num;
-use libzeropool::native::{
+use libzkbob_rs::libzeropool::native::{
     note::Note as NativeNote,
     account::Account as NativeAccount,
 };
@@ -107,6 +107,11 @@ export interface VK {
     gamma: string[][]; // G2
     delta: string[][]; // G2
     ic: string[][];    // G1[]
+}
+
+export interface IAddressComponents {
+    d: string;
+    p_d: string;
 }
 
 export interface ITxBaseFields {
@@ -293,6 +298,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "TxInput")]
     pub type TxInput;
+
+    #[wasm_bindgen(typescript_type = "IAddressComponents")]
+    pub type IAddressComponents;
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -301,7 +309,7 @@ pub struct IndexedAccount {
     pub account: NativeAccount<Fr>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexedNote {
     pub index: u64,
     pub note: NativeNote<Fr>,

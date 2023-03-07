@@ -1,6 +1,6 @@
 {
   "name": "libzkbob-rs-node",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "Neon version of libzkbob-rs",
   "main": "index.js",
   "types": "index.d.ts",
@@ -11,9 +11,21 @@
     "install": "npm run build-release",
     "test": "cargo test"
   },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src",
+    "Cargo.toml",
+    "LICENSE_APACHE",
+    "LICENSE_MIT",
+    "README.md"
+  ],
   "author": "Dmitry Vdovin <voidxnull@gmail.com>",
   "license": "MIT OR Apache-2.0",
   "dependencies": {
     "cargo-cp-artifact": "^0.1"
+  },
+  "devDependencies": {
+    "@types/node": "18.13.0"
   }
 }

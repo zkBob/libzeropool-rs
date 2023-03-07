@@ -3,6 +3,7 @@ export namespace Constants {
     export const IN: number;
     export const OUTLOG: number;
     export const OUT: number;
+    export const DELEGATED_DEPOSITS_NUM: number;
 }
 
 declare class MerkleTree {
@@ -118,8 +119,10 @@ declare class Proof {
 
     static tx(params: Params, tr_pub: TransferPub, tr_sec: TransferSec): Proof;
     static tree(params: Params, tr_pub: TreePub, tr_sec: TreeSec): Proof;
+    static delegatedDeposit(params: Params, tr_pub: DelegatedDepositBatchPub, tr_sec: DelegatedDepositBatchSec): Proof;
     static txAsync(params: Params, tr_pub: TransferPub, tr_sec: TransferSec): Promise<Proof>;
     static treeAsync(params: Params, tr_pub: TreePub, tr_sec: TreeSec): Promise<Proof>;
+    static delegatedDepositAsync(params: Params, tr_pub: DelegatedDepositBatchPub, tr_sec: DelegatedDepositBatchSec): Promise<Proof>;
     static verify(vk: VK, proof: SnarkProof, inputs: Array<string>): boolean;
 }
 
@@ -128,4 +131,69 @@ declare class Helpers {
     static parseDelta(delta: string): { v: string, e: string, index: string, poolId: string }
     static numToStr(num: Buffer): string
     static strToNum(str: string): Buffer
+    static isInPrimeSubgroup(num: Buffer): boolean
 }
+
+declare class Keys {
+    public sk: string;
+    public a: string;
+    public eta: string;
+
+    static derive(sk: string): Keys;
+}
+
+declare class TransactionData {
+    public: TransferPub;
+    secret: TransferSec;
+    ciphertext: Buffer;
+    memo: Buffer;
+    commitment_root: string;
+    out_hashes: string[];
+}
+
+interface FullDelegatedDeposit {
+    id: string | number;
+    owner: string | number;
+    receiver_d: string | number;
+    receiver_p: string | number;
+    denominated_amount: string | number;
+    denominated_fee: string | number;
+    expired: string | number;
+}
+
+interface MemoDelegatedDeposit {
+    id: string | number;
+    receiver_d: string | number;
+    receiver_p: string | number;
+    denominated_amount: string | number;
+}
+
+interface DelegatedDeposit {
+    d: string;
+    p_d: string;
+    b: string;
+}
+
+interface DelegatedDepositBatchPub {
+    keccak_sum: string;
+}
+
+interface DelegatedDepositBatchSec {
+    deposits: DelegatedDeposit[];
+}
+
+declare class DelegatedDepositsData {
+    public: DelegatedDepositBatchPub;
+    secret: DelegatedDepositBatchSec;
+    memo: Buffer;
+    out_commitment_hash: string;
+
+    static create(
+        deposits: MemoDelegatedDeposit[],
+    ): Promise<DelegatedDepositsData>;
+}
+
+declare function delegatedDepositsToCommitment(
+    deposits: MemoDelegatedDeposit[],
+): string;
+

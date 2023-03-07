@@ -5,10 +5,12 @@ use neon::prelude::*;
 use serde::Serialize;
 
 mod helpers;
+mod keys;
 mod merkle;
 mod params;
 mod proof;
 mod storage;
+mod tx;
 
 pub type PoolParams = PoolBN256;
 pub type Fr = <PoolParams as PoolParamsTrait>::Fr;
@@ -22,6 +24,7 @@ struct Constants {
     IN: usize,
     OUTLOG: usize,
     OUT: usize,
+    DELEGATED_DEPOSITS_NUM: usize,
 }
 
 #[neon::main]
@@ -33,6 +36,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
             IN: constants::IN,
             OUTLOG: constants::OUTPLUSONELOG,
             OUT: constants::OUT,
+            DELEGATED_DEPOSITS_NUM: constants::DELEGATED_DEPOSITS_NUM,
         },
     )
     .unwrap();
@@ -44,8 +48,13 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     cx.export_function("proveTx", proof::prove_tx)?;
     cx.export_function("proveTree", proof::prove_tree)?;
+    cx.export_function("proveDelegatedDeposit", proof::prove_delegated_deposit)?;
     cx.export_function("proveTxAsync", proof::prove_tx_async)?;
     cx.export_function("proveTreeAsync", proof::prove_tree_async)?;
+    cx.export_function(
+        "proveDelegatedDepositAsync",
+        proof::prove_delegated_deposit_async,
+    )?;
     cx.export_function("verify", proof::verify_proof)?;
 
     cx.export_function("merkleNew", merkle::merkle_new)?;
@@ -79,6 +88,19 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("helpersParseDelta", helpers::parse_delta_string)?;
     cx.export_function("helpersNumToStr", helpers::num_to_str)?;
     cx.export_function("helpersStrToNum", helpers::str_to_num)?;
+    cx.export_function("helpersIsInPrimeSubgroup", helpers::is_in_prime_subgroup)?;
+    
+    cx.export_function("keysDerive", keys::keys_derive)?;
+
+    cx.export_function(
+        "createDelegatedDepositTxAsync",
+        tx::create_delegated_deposit_tx_async,
+    )?;
+
+    cx.export_function(
+        "delegatedDepositsToCommitment",
+        tx::delegated_deposits_to_commitment,
+    )?;
 
     Ok(())
 }

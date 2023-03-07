@@ -1,4 +1,4 @@
-use libzeropool::fawkes_crypto::ff_uint::Uint;
+use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Uint;
 use libzkbob_rs::keys::reduce_sk as reduce_sk_native;
 use wasm_bindgen::prelude::*;
 

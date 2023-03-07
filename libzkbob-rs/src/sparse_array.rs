@@ -129,7 +129,7 @@ where
         self.db
             .iter(0)
             .for_each(|(key, _)| {
-                batch.delete(0 as u32, &key); 
+                batch.delete(0_u32, &key);
             });
         self.db.write(batch).unwrap();
     }
