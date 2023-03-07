@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 
-use libzeropool::native::tx::nullifier;
+use libzkbob_rs::libzeropool::native::tx::nullifier;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 

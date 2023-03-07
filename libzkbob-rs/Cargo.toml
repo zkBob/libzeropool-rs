@@ -24,7 +24,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 
 [dependencies.libzeropool]
 git = "https://github.com/zkbob/libzeropool-zkbob"
-branch = "master"
+branch = "feature/compliance"
 package = "libzeropool-zkbob"
 version = "1.1.0"
 default-features = false

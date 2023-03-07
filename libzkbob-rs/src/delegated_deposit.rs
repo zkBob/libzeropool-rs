@@ -171,13 +171,7 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
 mod tests {
     use std::str::FromStr;
 
-    use libzeropool::{
-        fawkes_crypto::backend::bellman_groth16::{engines::Bn256, verifier::verify, Parameters},
-        POOL_PARAMS,
-    };
-
     use super::*;
-    use crate::proof::prove_delegated_deposit;
 
     #[test]
     fn test_delegated_deposit_data_create_full() {

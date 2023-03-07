@@ -9,11 +9,23 @@ use libzkbob_rs::libzeropool::{
             decrypt_account_no_validate,
             decrypt_note_no_validate
         },
-        key
+        key::{
+            self,derive_key_p_d
+        }
     },
-    fawkes_crypto::ff_uint::{ Num, NumRepr, Uint }
+    fawkes_crypto::ff_uint::{ Num, NumRepr, Uint },
+    constants,
 };
-use libzkbob_rs::{merkle::Hash, keys::Keys};
+use libzkbob_rs::{
+    merkle::Hash,
+    keys::Keys,
+    utils::zero_account,
+    delegated_deposit::{
+        DELEGATED_DEPOSIT_FLAG,
+        MEMO_DELEGATED_DEPOSIT_SIZE,
+        MemoDelegatedDeposit
+    }
+};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
