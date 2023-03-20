@@ -14,7 +14,7 @@ pub fn reduce_sk(seed: &[u8]) -> Vec<u8> {
     reduce_sk_native::<Fs>(seed).to_uint().0.to_little_endian()
 }
 
-#[wasm_bindgen(js_name = gen_burner_address)]
+#[wasm_bindgen(js_name = genBurnerAddress)]
 pub fn gen_burner_address(pool_id: u64, seed: &[u8]) -> Result<String, JsValue> {
     if pool_id >= 1 << 24 {
         return Err(js_err!("PoolID should be less than {}", 1 << 24));
