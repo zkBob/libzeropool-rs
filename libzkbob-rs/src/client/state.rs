@@ -41,8 +41,8 @@ where
     P::Fr: 'static,
 {
     pub async fn init_web(db_id: String, params: P) -> Self {
-        let merkle_db_name = format!("zeropool.{}.smt", &db_id);
-        let tx_db_name = format!("zeropool.{}.txs", &db_id);
+        let merkle_db_name = format!("zkb.{}.smt", &db_id);
+        let tx_db_name = format!("zkb.{}.txs", &db_id);
         let tree = MerkleTree::new_web(&merkle_db_name, params.clone()).await;
         let txs = TxStorage::new_web(&tx_db_name).await;
 
