@@ -1,4 +1,5 @@
 use crate::utils::keccak256;
+use crate::client::POOL_ID_BITS;
 use libzeropool::{
     constants,
     fawkes_crypto::{
@@ -57,14 +58,29 @@ pub fn parse_address<P: PoolParams>(
 pub fn format_address<P: PoolParams>(
     d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
     p_d: Num<P::Fr>,
+    pool_id: Option<BoundedNum<P::Fr, { POOL_ID_BITS }>>,
 ) -> String {
     let mut buf: [u8; ADDR_LEN] = [0; ADDR_LEN];
 
     d.serialize(&mut &mut buf[0..10]).unwrap();
     p_d.serialize(&mut &mut buf[10..42]).unwrap();
 
-    let hash = keccak256(&buf[0..42]);
-    buf[42..ADDR_LEN].clone_from_slice(&hash[0..4]);
+    let raw_addr_hash = keccak256(&buf[0..42]);
+
+    let checksum_hash = match pool_id {
+        // pool-specific format
+        Some(pool_id) => {
+            let mut hash_src: [u8; POOL_ID_BITS + 32] = [0; POOL_ID_BITS + 32];
+            pool_id.serialize(& mut &mut hash_src[0..(POOL_ID_BITS >> 3)]).unwrap();
+            hash_src[(POOL_ID_BITS >> 3)..POOL_ID_BITS + 32].clone_from_slice(&keccak256(&buf[0..42]));
+            keccak256(&hash_src)
+        },
+        // generic format
+        None => keccak256(&buf[0..42]),
+    };
+    buf[42..ADDR_LEN].clone_from_slice(&checksum_hash[0..4]);
+
+
 
     bs58::encode(buf).into_string()
 }

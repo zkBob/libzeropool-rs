@@ -37,6 +37,8 @@ use crate::{
 
 pub mod state;
 
+
+
 #[derive(Debug, Error)]
 pub enum CreateTxError {
     #[error("Too many outputs: expected {max} max got {got}")]
@@ -106,8 +108,10 @@ pub enum TxType<Fr: PrimeField> {
     ),
 }
 
+pub const POOL_ID_BITS: usize = 24;
+
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
-    pub pool_id: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
+    pub pool_id: BoundedNum<P::Fr, { POOL_ID_BITS }>,
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
