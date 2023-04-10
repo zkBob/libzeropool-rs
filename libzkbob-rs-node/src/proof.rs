@@ -5,8 +5,12 @@ use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::verifier:
 use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
 use libzkbob_rs::libzeropool::POOL_PARAMS;
 use libzkbob_rs::proof::{
-    prove_delegated_deposit as prove_delegated_deposit_native, prove_tree as prove_tree_native,
+    prove_delegated_deposit as prove_delegated_deposit_native,
+    prove_delegated_deposit_precomputed as prove_delegated_deposit_native_precomputed, 
+    prove_tree as prove_tree_native,
+    prove_tree_precomputed as prove_tree_native_precomputed,
     prove_tx as prove_tx_native,
+    prove_tx_precomputed as prove_tx_native_precomputed,
 };
 use neon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -31,7 +35,21 @@ pub fn prove_tx_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
 
     let promise = cx
         .task(move || {
-            let (inputs, proof) = prove_tx_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+            let (inputs, proof) = match &params.precomputed {
+                Some(precomputed) => prove_tx_native_precomputed(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    tr_pub, 
+                    tr_sec, 
+                    &precomputed
+                ),
+                None => prove_tx_native(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    tr_pub, 
+                    tr_sec,
+                ),
+            };
             SnarkProof { inputs, proof }
         })
         .promise(move |mut cx, proof| {
@@ -50,7 +68,21 @@ pub fn prove_tree_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
 
     let promise = cx
         .task(move || {
-            let (inputs, proof) = prove_tree_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+            let (inputs, proof) = match &params.precomputed {
+                Some(precomputed) => prove_tree_native_precomputed(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    tr_pub, 
+                    tr_sec, 
+                    precomputed
+                ),
+                None => prove_tree_native(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    tr_pub, 
+                    tr_sec,
+                ),
+            };
             SnarkProof { inputs, proof }
         })
         .promise(move |mut cx, proof| {
@@ -69,8 +101,21 @@ pub fn prove_delegated_deposit_async(mut cx: FunctionContext) -> JsResult<JsProm
 
     let promise = cx
         .task(move || {
-            let (inputs, proof) =
-                prove_delegated_deposit_native(&params.inner, &*POOL_PARAMS, d_pub, d_sec);
+            let (inputs, proof) = match &params.precomputed {
+                Some(precomputed) => prove_delegated_deposit_native_precomputed(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    d_pub, 
+                    d_sec, 
+                    precomputed
+                ),
+                None => prove_delegated_deposit_native(
+                    &params.inner, 
+                    &*POOL_PARAMS, 
+                    d_pub, 
+                    d_sec,
+                ),
+            };
             SnarkProof { inputs, proof }
         })
         .promise(move |mut cx, proof| {
@@ -88,7 +133,21 @@ pub fn prove_tx(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tr_pub = neon_serde::from_value(&mut cx, tr_pub_js).unwrap();
     let tr_sec = neon_serde::from_value(&mut cx, tr_sec_js).unwrap();
 
-    let pair = prove_tx_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+    let pair = match &params.precomputed {
+        Some(precomputed) => prove_tx_native_precomputed(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            tr_pub, 
+            tr_sec, 
+            &precomputed
+        ),
+        None => prove_tx_native(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            tr_pub, 
+            tr_sec,
+        ),
+    };
 
     let proof = SnarkProof {
         inputs: pair.0,
@@ -108,7 +167,21 @@ pub fn prove_tree(mut cx: FunctionContext) -> JsResult<JsValue> {
     let tr_pub = neon_serde::from_value(&mut cx, tr_pub_js).unwrap();
     let tr_sec = neon_serde::from_value(&mut cx, tr_sec_js).unwrap();
 
-    let pair = prove_tree_native(&params.inner, &*POOL_PARAMS, tr_pub, tr_sec);
+    let pair = match &params.precomputed {
+        Some(precomputed) => prove_tree_native_precomputed(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            tr_pub, 
+            tr_sec, 
+            precomputed
+        ),
+        None => prove_tree_native(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            tr_pub, 
+            tr_sec,
+        ),
+    };
 
     let proof = SnarkProof {
         inputs: pair.0,
@@ -128,8 +201,21 @@ pub fn prove_delegated_deposit(mut cx: FunctionContext) -> JsResult<JsValue> {
     let d_pub = neon_serde::from_value(&mut cx, d_pub_js).unwrap();
     let d_sec = neon_serde::from_value(&mut cx, d_sec_js).unwrap();
 
-    let (inputs, proof) =
-        prove_delegated_deposit_native(&params.inner, &*POOL_PARAMS, d_pub, d_sec);
+    let (inputs, proof) = match &params.precomputed {
+        Some(precomputed) => prove_delegated_deposit_native_precomputed(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            d_pub, 
+            d_sec, 
+            precomputed
+        ),
+        None => prove_delegated_deposit_native(
+            &params.inner, 
+            &*POOL_PARAMS, 
+            d_pub, 
+            d_sec,
+        ),
+    };
 
     let proof = SnarkProof { inputs, proof };
 
