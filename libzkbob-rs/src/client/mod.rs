@@ -29,6 +29,7 @@ use thiserror::Error;
 use self::state::{State, Transaction};
 use crate::{
     address::{format_address, parse_address, AddressParseError},
+    pools::POOL_ID_BITS,
     keys::{reduce_sk, Keys},
     random::CustomRng,
     merkle::Hash,
@@ -108,8 +109,6 @@ pub enum TxType<Fr: PrimeField> {
     ),
 }
 
-pub const POOL_ID_BITS: usize = 24;
-
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
     pub pool_id: BoundedNum<P::Fr, { POOL_ID_BITS }>,
     pub keys: Keys<P>,
@@ -156,11 +155,52 @@ where
         (d, pk_d.x)
     }
 
-    /// Generates a new private address.
+    /// Generates a new private address for the current pool
     pub fn generate_address(&self) -> String {
         let (d, p_d) = self.generate_address_components();
 
-        format_address::<P>(d, p_d)
+        format_address::<P>(d, p_d, Some(self.pool_id))
+    }
+
+    /// Generates a new private generic address (for all pools)
+    pub fn generate_universal_address(&self) -> String {
+        let (d, p_d) = self.generate_address_components();
+
+        format_address::<P>(d, p_d, None)
+    }
+
+    pub fn generate_address_from_components(
+        &self,
+        d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
+        p_d: Num<P::Fr>
+    ) -> String {
+        format_address::<P>(d, p_d, Some(self.pool_id))
+    }
+
+    pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
+        let mut rng = CustomRng;
+
+        let sk = reduce_sk(seed);
+        let keys = Keys::derive(sk, &self.params);
+        let d: BoundedNum<_, { constants::DIVERSIFIER_SIZE_BITS }> = rng.gen();
+        let pk_d = derive_key_p_d(d.to_num(), keys.eta, &self.params);
+
+        format_address::<P>(d, pk_d.x, Some(self.pool_id))
+    }
+
+    pub fn validate_address(&self, address: &str) -> bool {
+        match parse_address(address, &self.params) {
+            Ok((_, _, pool)) => {
+                match pool {
+                    Some(pool) => {
+                        let cur_pool_id: u32 = self.pool_id.to_num().try_into().unwrap();
+                        return pool.pool_id() == cur_pool_id
+                    },
+                    None => true
+                }
+            },
+            Err(_) => false,
+        }
     }
 
     /// Attempts to decrypt notes.
@@ -175,7 +215,7 @@ where
 
     pub fn is_own_address(&self, address: &str) -> bool {
         let mut result = false;
-        if let Ok((d, p_d)) = parse_address::<P>(address, &self.params) {
+        if let Ok((d, p_d, pool)) = parse_address::<P>(address, &self.params) {
             let own_p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
             result = own_p_d == p_d;
         }
@@ -219,7 +259,7 @@ where
                 let d = self.pool_id;
                 let p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
                 Account {
-                    d: self.pool_id,
+                    d: BoundedNum::new(self.pool_id.to_num()),
                     p_d,
                     i: BoundedNum::new(Num::ZERO),
                     b: BoundedNum::new(Num::ZERO),
@@ -337,7 +377,7 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d) = parse_address::<P>(&dest.to, &self.params)?;
+                        let (to_d, to_p_d, pool) = parse_address::<P>(&dest.to, &self.params)?;
 
                         output_value += dest.amount.to_num();
 

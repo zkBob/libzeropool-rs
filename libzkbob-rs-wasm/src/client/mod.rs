@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
+use std::str::FromStr;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -17,18 +18,21 @@ use libzkbob_rs::libzeropool::{
     native::{
         account::Account as NativeAccount,
         note::Note as NativeNote,
+        boundednum::BoundedNum,
         tx::{parse_delta, TransferPub as NativeTransferPub, TransferSec as NativeTransferSec}
     },
 };
 use libzkbob_rs::{
     client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
-    merkle::{Hash, Node}
+    merkle::{Hash, Node},
+    address::parse_address,
 };
+
 use serde::{Serialize};
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::ParseTxsColdStorageResult;
+use crate::{ParseTxsColdStorageResult, IAddressComponents};
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -87,10 +91,59 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = generateAddress)]
-    /// Generates a new private address.
+    /// Generates a new private address for the current pool
     pub fn generate_address(&self) -> String {
         self.inner.borrow().generate_address()
     }
+
+    #[wasm_bindgen(js_name = genUniversalAddress)]
+    /// Generates a new private address for any pool
+    pub fn generate_universal_address(&self) -> String {
+        self.inner.borrow().generate_universal_address()
+    }
+
+    #[wasm_bindgen(js_name = genBurnerAddress)]
+    pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
+        self.inner.borrow().gen_address_for_seed(seed)
+    }
+
+    // ----==== MOVED FUNCTIONS: FROM HERE ====----
+    #[wasm_bindgen(js_name = "validateAddress")]
+    pub fn validate_address(&self, address: &str) -> bool {
+        self.inner.borrow().validate_address(address)
+    }
+
+    #[wasm_bindgen(js_name = "assembleAddress")]
+    pub fn assemble_address(&self, d: &str, p_d: &str) -> String {
+        let d = Num::from_str(d).unwrap();
+        let d = BoundedNum::new(d);
+        let p_d = Num::from_str(p_d).unwrap();
+
+        self.inner.borrow().generate_address_from_components(d, p_d)
+    }
+
+    #[wasm_bindgen(js_name = "parseAddress")]
+    pub fn parse_address_(&self, address: &str) -> IAddressComponents {
+        let (d, p_d, pool) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
+
+        #[derive(Serialize)]
+        struct Address {
+            d: String,
+            p_d: String,
+            pool_id: String,
+        }
+
+        let address = Address {
+            d: d.to_num().to_string(),
+            p_d: p_d.to_string(),
+            pool_id: if let Some(pool) = pool { format!("{}", pool.pool_id()) } else { "".to_string() },
+        };
+
+        serde_wasm_bindgen::to_value(&address)
+            .unwrap()
+            .unchecked_into::<IAddressComponents>()
+    }
+    // ----==== MOVED FUNCTIONS: TO HERE ====----
 
     #[wasm_bindgen(js_name = decryptNotes)]
     /// Attempts to decrypt notes.

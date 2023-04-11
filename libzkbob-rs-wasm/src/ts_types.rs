@@ -108,6 +108,7 @@ export interface VK {
 export interface IAddressComponents {
     d: string;
     p_d: string;
+    pool_id: string;
 }
 
 export interface ITxBaseFields {
