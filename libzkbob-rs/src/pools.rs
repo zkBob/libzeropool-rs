@@ -1,5 +1,8 @@
 use std::fmt;
 
+use libzeropool::native::boundednum::BoundedNum;
+use libzeropool::fawkes_crypto::ff_uint::{PrimeField, Uint, NumRepr, Num};
+
 
 
 pub const POOL_ID_BITS: usize = 24;
@@ -48,6 +51,13 @@ impl Pool {
             Pool::Goerli => 0xffff02,
             Pool::GoerliOptimism => 0xffff03,
         }
+    }
+
+    pub fn pool_id_num<Fr: PrimeField>(&self) -> BoundedNum<Fr, POOL_ID_BITS> {
+        let pool_id = self.pool_id();
+        let pool_id_num = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id as u64))).unwrap();
+
+        BoundedNum::new(pool_id_num)
     }
 
     pub fn address_prefix(&self) -> &str {

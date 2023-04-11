@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::convert::{TryInto};
 
 use crate::pools::Pool;
 use crate::{utils::keccak256, pools::{GENERIC_ADDRESS_PREFIX, POOL_ID_BITS}};
@@ -57,8 +57,8 @@ pub fn parse_address<P: PoolParams>(
                     // pool-specific address
                     const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
                     let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-                    pool.pool_id().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
-                    hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&keccak256(&addr_hash));
+                    pool.pool_id_num::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+                    hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
 
                     if keccak256(&hash_src)[0..=3] != checksum {
                         return Err(AddressParseError::InvalidChecksum);

@@ -29,7 +29,7 @@ use thiserror::Error;
 use self::state::{State, Transaction};
 use crate::{
     address::{format_address, parse_address, AddressParseError},
-    pools::POOL_ID_BITS,
+    pools::{POOL_ID_BITS, Pool},
     keys::{reduce_sk, Keys},
     random::CustomRng,
     merkle::Hash,
@@ -124,11 +124,12 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: Num<P::Fs>, pool_id: Num<P::Fr>, state: State<D, P>, params: P) -> Self {
+    /// pool_id: BoundedNum<P::Fr, { POOL_ID_BITS }>
+    pub fn new(sk: Num<P::Fs>, pool: Pool, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
-            pool_id: BoundedNum::new(pool_id),
+            pool_id: pool.pool_id_num(),
             keys,
             state,
             params,
@@ -137,9 +138,9 @@ where
     }
 
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: Num<P::Fr>, state: State<D, P>, params: P) -> Self {
+    pub fn from_seed(seed: &[u8], pool: Pool, state: State<D, P>, params: P) -> Self {
         let sk = reduce_sk(seed);
-        Self::new(sk, pool_id, state, params)
+        Self::new(sk, pool, state, params)
     }
 
     fn generate_address_components(
@@ -604,13 +605,13 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
-                BoundedNum::new(Num::ZERO),
+                BoundedNum::ZERO,
                 vec![],
-                BoundedNum::new(Num::ZERO),
+                BoundedNum::ZERO,
             ),
             None,
             None,
@@ -621,7 +622,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
@@ -639,7 +640,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -660,7 +661,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -681,13 +682,13 @@ mod tests {
     fn test_user_account_is_own_address() {
         let acc_1 = UserAccount::new(
             Num::ZERO,
-            Num::ZERO,
+            Pool::Goerli,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
-            Num::ZERO,
+            Pool::Goerli,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );

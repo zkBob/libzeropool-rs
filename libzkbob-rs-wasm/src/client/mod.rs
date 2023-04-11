@@ -11,8 +11,7 @@ use libzkbob_rs::libzeropool::{
     constants,
     fawkes_crypto::{
         core::sizedvec::SizedVec,
-        ff_uint::Num,
-        ff_uint::{NumRepr, Uint},
+        ff_uint::{Num, NumRepr, Uint},
         borsh::BorshDeserialize,
     },
     native::{
@@ -26,6 +25,7 @@ use libzkbob_rs::{
     client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
     merkle::{Hash, Node},
     address::parse_address,
+    pools::Pool
 };
 
 use serde::{Serialize};
@@ -64,18 +64,16 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
-        if pool_id >= 1 << 24 {
-            return Err(js_err!("PoolID should be less than {}", 1 << 24));
-        }
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
-        let pool_id = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id)))
-            .ok_or_else(|| js_err!("Invalid pool id"))?;
+
+        let pool = Pool::from_pool_id(pool_id)
+            .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))?;
             
-        let account = NativeUserAccount::new(sk, pool_id, state.inner, POOL_PARAMS.clone());
+        let account = NativeUserAccount::new(sk, pool, state.inner, POOL_PARAMS.clone());
 
         Ok(UserAccount {
             inner: Rc::new(RefCell::new(account)),
@@ -85,7 +83,7 @@ impl UserAccount {
     // TODO: Is this safe?
     #[wasm_bindgen(js_name = fromSeed)]
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn from_seed(seed: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
         let sk = reduce_sk(seed);
         Self::new(&sk, pool_id, state)
     }
