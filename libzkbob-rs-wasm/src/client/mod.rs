@@ -67,25 +67,29 @@ impl UserAccount {
     pub fn new(sk: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
-        let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
-            .ok_or_else(|| js_err!("Invalid spending key"))?;
-
         let pool = Pool::from_pool_id(pool_id)
             .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))?;
             
+        UserAccount::create_internal(sk, pool, state)
+    }
+
+    #[wasm_bindgen(js_name = newSepoliaAccount)]
+    /// A workaround related with Sepolia pool_id issue
+    pub fn new_sepolia_account(sk: &[u8], state: UserState) -> Result<UserAccount, JsValue> {
+        UserAccount::create_internal(sk, Pool::Sepolia, state)
+    }
+
+    fn create_internal(sk: &[u8], pool: Pool, state: UserState) -> Result<UserAccount, JsValue> {
+        crate::utils::set_panic_hook();
+
+        let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
+            .ok_or_else(|| js_err!("Invalid spending key"))?;
+
         let account = NativeUserAccount::new(sk, pool, state.inner, POOL_PARAMS.clone());
 
         Ok(UserAccount {
             inner: Rc::new(RefCell::new(account)),
         })
-    }
-
-    // TODO: Is this safe?
-    #[wasm_bindgen(js_name = fromSeed)]
-    /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
-        let sk = reduce_sk(seed);
-        Self::new(&sk, pool_id, state)
     }
 
     #[wasm_bindgen(js_name = generateAddress)]
@@ -105,7 +109,6 @@ impl UserAccount {
         self.inner.borrow().gen_address_for_seed(seed)
     }
 
-    // ----==== MOVED FUNCTIONS: FROM HERE ====----
     #[wasm_bindgen(js_name = "validateAddress")]
     pub fn validate_address(&self, address: &str) -> bool {
         self.inner.borrow().validate_address(address)
@@ -141,7 +144,6 @@ impl UserAccount {
             .unwrap()
             .unchecked_into::<IAddressComponents>()
     }
-    // ----==== MOVED FUNCTIONS: TO HERE ====----
 
     #[wasm_bindgen(js_name = decryptNotes)]
     /// Attempts to decrypt notes.

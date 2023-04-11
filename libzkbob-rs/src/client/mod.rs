@@ -29,7 +29,7 @@ use thiserror::Error;
 use self::state::{State, Transaction};
 use crate::{
     address::{format_address, parse_address, AddressParseError},
-    pools::{POOL_ID_BITS, Pool},
+    pools::Pool,
     keys::{reduce_sk, Keys},
     random::CustomRng,
     merkle::Hash,
@@ -50,6 +50,8 @@ pub enum CreateTxError {
     ProofNotFound(u64),
     #[error("Failed to parse address: {0}")]
     AddressParseError(#[from] AddressParseError),
+    #[error("The provided zkAddress belong to the wrong pool ({provided}, {expected})")]
+    MismatchedPools { provided: String, expected: String },
     #[error("Insufficient balance: sum of outputs is greater than sum of inputs: {0} > {1}")]
     InsufficientBalance(String, String),
     #[error("Insufficient energy: available {0}, received {1}")]
@@ -110,7 +112,7 @@ pub enum TxType<Fr: PrimeField> {
 }
 
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
-    pub pool_id: BoundedNum<P::Fr, { POOL_ID_BITS }>,
+    pub pool: Pool,
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
@@ -124,12 +126,11 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    /// pool_id: BoundedNum<P::Fr, { POOL_ID_BITS }>
     pub fn new(sk: Num<P::Fs>, pool: Pool, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
-            pool_id: pool.pool_id_num(),
+            pool,
             keys,
             state,
             params,
@@ -160,7 +161,7 @@ where
     pub fn generate_address(&self) -> String {
         let (d, p_d) = self.generate_address_components();
 
-        format_address::<P>(d, p_d, Some(self.pool_id))
+        format_address::<P>(d, p_d, Some(self.pool))
     }
 
     /// Generates a new private generic address (for all pools)
@@ -175,7 +176,7 @@ where
         d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
         p_d: Num<P::Fr>
     ) -> String {
-        format_address::<P>(d, p_d, Some(self.pool_id))
+        format_address::<P>(d, p_d, Some(self.pool))
     }
 
     pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
@@ -186,17 +187,14 @@ where
         let d: BoundedNum<_, { constants::DIVERSIFIER_SIZE_BITS }> = rng.gen();
         let pk_d = derive_key_p_d(d.to_num(), keys.eta, &self.params);
 
-        format_address::<P>(d, pk_d.x, Some(self.pool_id))
+        format_address::<P>(d, pk_d.x, Some(self.pool))
     }
 
     pub fn validate_address(&self, address: &str) -> bool {
         match parse_address(address, &self.params) {
             Ok((_, _, pool)) => {
                 match pool {
-                    Some(pool) => {
-                        let cur_pool_id: u32 = self.pool_id.to_num().try_into().unwrap();
-                        return pool.pool_id() == cur_pool_id
-                    },
+                    Some(pool) => pool.pool_id() == self.pool.pool_id(),
                     None => true
                 }
             },
@@ -215,13 +213,17 @@ where
     }
 
     pub fn is_own_address(&self, address: &str) -> bool {
-        let mut result = false;
-        if let Ok((d, p_d, pool)) = parse_address::<P>(address, &self.params) {
-            let own_p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
-            result = own_p_d == p_d;
+        match parse_address::<P>(address, &self.params) {
+            Ok((d, p_d, pool)) => {
+                let is_our_sk = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x == p_d;
+                let is_correct_pool = match pool {
+                    Some(pool) => pool == self.pool,
+                    None => true,
+                };
+                is_our_sk && is_correct_pool
+            },
+            Err(_) => false
         }
-
-        result
     }
 
     /// Constructs a transaction.
@@ -257,10 +259,10 @@ where
         let in_account = in_account_optimistic.unwrap_or_else(|| {
             state.latest_account.unwrap_or_else(|| {
                 // Initial account should have d = pool_id to protect from reply attacks
-                let d = self.pool_id;
-                let p_d = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x;
+                let d = self.pool.pool_id_num().to_num();
+                let p_d = derive_key_p_d(d, self.keys.eta, &self.params).x;
                 Account {
-                    d: BoundedNum::new(self.pool_id.to_num()),
+                    d: BoundedNum::new(d),
                     p_d,
                     i: BoundedNum::new(Num::ZERO),
                     b: BoundedNum::new(Num::ZERO),
@@ -380,19 +382,22 @@ where
                     .map(|dest| {
                         let (to_d, to_p_d, pool) = parse_address::<P>(&dest.to, &self.params)?;
 
-                        output_value += dest.amount.to_num();
-
-                        Ok(Note {
-                            d: to_d,
-                            p_d: to_p_d,
-                            b: dest.amount,
-                            t: rng.gen(),
-                        })
+                        if pool.is_none() || pool.unwrap() == self.pool {
+                            output_value += dest.amount.to_num();
+                            Ok(Note {
+                                d: to_d,
+                                p_d: to_p_d,
+                                b: dest.amount,
+                                t: rng.gen(),
+                            })
+                        } else {
+                            Err(CreateTxError::MismatchedPools { provided: pool.unwrap().to_string(), expected: self.pool.to_string() })
+                        }
                     })
                     // fill out remaining output notes with zeroes
                     .chain((0..).map(|_| Ok(zero_note())))
                     .take(constants::OUT)
-                    .collect::<Result<SizedVec<_, { constants::OUT }>, AddressParseError>>()?;
+                    .collect::<Result<SizedVec<_, { constants::OUT }>, CreateTxError>>()?;
 
                 (outputs.len(), out_notes)
             } else {
@@ -518,7 +523,7 @@ where
             delta_value,
             delta_energy,
             delta_index,
-            *self.pool_id.clone().as_num(),
+            self.pool.pool_id_num().to_num(),
         );
 
         // calculate virtual subtree from the optimistic state
@@ -701,5 +706,32 @@ mod tests {
 
         assert!(!acc_1.is_own_address(&address_2));
         assert!(!acc_2.is_own_address(&address_1));
+    }
+
+    #[test]
+    fn test_chain_specific_address() {
+        let accs = [
+            UserAccount::new(Num::ZERO, Pool::Polygon, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::Sepolia, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::Goerli, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::GoerliOptimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+        ];
+        let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
+        let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
+
+        accs.iter().enumerate().for_each(|(acc_idx, acc)| {
+            pool_addresses.iter().enumerate().for_each(|(addr_idx, addr)| {
+                if addr_idx == acc_idx {
+                    assert!(acc.is_own_address(&addr));
+                } else {
+                    assert!(!acc.is_own_address(&addr));
+                }
+            });
+
+            universal_addresses.iter().for_each(|addr| {
+                assert!(acc.is_own_address(&addr));
+            });
+        });
     }
 }

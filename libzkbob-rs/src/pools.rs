@@ -13,7 +13,7 @@ pub const GENERIC_ADDRESS_PREFIX: &str = "zkbob";
 // It used to support multipool shielded addresses
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Pool {
-    Polygon = 0,
+    Polygon,
     Optimism,
     Sepolia,
     Goerli,
@@ -45,9 +45,10 @@ impl Pool {
 
     pub fn pool_id(&self) -> u32 {
         match self {
-            Pool::Polygon => 0x00000,
-            Pool::Optimism => 0x00000,
-            Pool::Sepolia => 0x00000,
+            Pool::Polygon => 0x000000,
+            Pool::Optimism => 0x000001,
+            // here is an issue with Sepolia pool implementation
+            Pool::Sepolia => 0x000000, 
             Pool::Goerli => 0xffff02,
             Pool::GoerliOptimism => 0xffff03,
         }
