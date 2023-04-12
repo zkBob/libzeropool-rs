@@ -109,6 +109,8 @@ export interface IAddressComponents {
     d: string;
     p_d: string;
     pool_id: string;
+    checksum: Uint8Array;
+    format: string;
 }
 
 export interface ITxBaseFields {

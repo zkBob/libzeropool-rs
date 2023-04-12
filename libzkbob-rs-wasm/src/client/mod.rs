@@ -28,7 +28,7 @@ use libzkbob_rs::{
     pools::Pool
 };
 
-use serde::{Serialize};
+use serde::Serialize;
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
@@ -39,7 +39,7 @@ use crate::database::Database;
 use crate::helpers::vec_into_iter;
 use crate::ts_types::Hash as JsHash;
 use crate::{
-    keys::reduce_sk, Account, Fr, Fs, Hashes, 
+    Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, PoolParams, Transaction, UserState, POOL_PARAMS,
     MerkleProof, Pair, TreeNode, TreeNodes,
@@ -64,19 +64,19 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_id: u32, state: UserState, network: &str) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
-        let pool = Pool::from_pool_id(pool_id)
-            .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))?;
+        let pool = if network.to_lowercase() == "sepolia" && pool_id == Pool::Sepolia.pool_id() {
+            // A workaround related with Sepolia pool_id issue
+            // (pool_id for Sepolia BOB pool is equal to Polygon BOB pool)
+            Ok(Pool::Sepolia)
+        } else {
+            Pool::from_pool_id(pool_id)
+                .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))
+        }?;
             
         UserAccount::create_internal(sk, pool, state)
-    }
-
-    #[wasm_bindgen(js_name = newSepoliaAccount)]
-    /// A workaround related with Sepolia pool_id issue
-    pub fn new_sepolia_account(sk: &[u8], state: UserState) -> Result<UserAccount, JsValue> {
-        UserAccount::create_internal(sk, Pool::Sepolia, state)
     }
 
     fn create_internal(sk: &[u8], pool: Pool, state: UserState) -> Result<UserAccount, JsValue> {
@@ -92,20 +92,20 @@ impl UserAccount {
         })
     }
 
-    #[wasm_bindgen(js_name = generateAddress)]
+    #[wasm_bindgen(js_name = "generateAddress")]
     /// Generates a new private address for the current pool
     pub fn generate_address(&self) -> String {
         self.inner.borrow().generate_address()
     }
 
-    #[wasm_bindgen(js_name = genUniversalAddress)]
+    #[wasm_bindgen(js_name = "generateUniversalAddress")]
     /// Generates a new private address for any pool
     pub fn generate_universal_address(&self) -> String {
         self.inner.borrow().generate_universal_address()
     }
 
-    #[wasm_bindgen(js_name = genBurnerAddress)]
-    pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
+    #[wasm_bindgen(js_name = "generateAddressForSeed")]
+    pub fn generate_address_for_seed(&self, seed: &[u8]) -> String {
         self.inner.borrow().gen_address_for_seed(seed)
     }
 
@@ -125,19 +125,21 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "parseAddress")]
     pub fn parse_address_(&self, address: &str) -> IAddressComponents {
-        let (d, p_d, pool) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
+        let (d, p_d, pool, format) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
 
         #[derive(Serialize)]
         struct Address {
             d: String,
             p_d: String,
             pool_id: String,
+            //format: String,
         }
 
         let address = Address {
             d: d.to_num().to_string(),
             p_d: p_d.to_string(),
             pool_id: if let Some(pool) = pool { format!("{}", pool.pool_id()) } else { "".to_string() },
+            //format: format.try_into().unwrap(),
         };
 
         serde_wasm_bindgen::to_value(&address)
@@ -145,7 +147,7 @@ impl UserAccount {
             .unchecked_into::<IAddressComponents>()
     }
 
-    #[wasm_bindgen(js_name = decryptNotes)]
+    #[wasm_bindgen(js_name = "decryptNotes")]
     /// Attempts to decrypt notes.
     pub fn decrypt_notes(&self, data: Vec<u8>) -> Result<IndexedNotes, JsValue> {
         let notes = self
@@ -168,7 +170,7 @@ impl UserAccount {
         Ok(notes)
     }
 
-    #[wasm_bindgen(js_name = decryptPair)]
+    #[wasm_bindgen(js_name = "decryptPair")]
     /// Attempts to decrypt account and notes.
     pub fn decrypt_pair(&self, data: Vec<u8>) -> Result<Option<Pair>, JsValue> {
         #[derive(Serialize)]

@@ -2,6 +2,7 @@ use std::convert::{TryInto};
 
 use crate::pools::Pool;
 use crate::{utils::keccak256, pools::{GENERIC_ADDRESS_PREFIX, POOL_ID_BITS}};
+use libzeropool::fawkes_crypto::ff_uint::Uint;
 use libzeropool::{
     constants,
     fawkes_crypto::{
@@ -31,6 +32,12 @@ pub enum AddressParseError {
     DeserializationError(#[from] std::io::Error),
 }
 
+pub enum AddressFormat {
+    Old,
+    PoolSpecific,
+    Generic,
+}
+
 pub fn parse_address<P: PoolParams>(
     address: &str,
     params: &P,
@@ -38,7 +45,8 @@ pub fn parse_address<P: PoolParams>(
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
         Num<P::Fr>, // p_d
-        Option<Pool>,   // None for generic and old addresses
+        Option<Pool>,   // None for generic addresses
+        AddressFormat,
     ),
     AddressParseError,
 >{
@@ -57,13 +65,15 @@ pub fn parse_address<P: PoolParams>(
                     // pool-specific address
                     const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
                     let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-                    pool.pool_id_num::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+                    let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
+                    let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
+                    pool_id_be.serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
                     hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
 
                     if keccak256(&hash_src)[0..=3] != checksum {
                         return Err(AddressParseError::InvalidChecksum);
                     }
-                    return Ok((d, p_d, Some(pool)));
+                    return Ok((d, p_d, Some(pool), AddressFormat::PoolSpecific));
                 },
                 None => {
                     if addr_components[0].to_lowercase() == GENERIC_ADDRESS_PREFIX {
@@ -71,7 +81,7 @@ pub fn parse_address<P: PoolParams>(
                         if &addr_hash[0..=3] != checksum {
                             return Err(AddressParseError::InvalidChecksum);
                         }
-                        return Ok((d, p_d, None));
+                        return Ok((d, p_d, None, AddressFormat::Generic));
                     } else {
                         return Err(AddressParseError::InvalidPrefix(addr_components[0].to_string()))
                     }
@@ -91,11 +101,12 @@ pub fn parse_address<P: PoolParams>(
             return Err(AddressParseError::InvalidChecksum);
         }
 
-        return Ok((d, p_d, None));
+        // the old format should be acceptable on the Polygon BOB pool only
+        return Ok((d, p_d, Some(Pool::Polygon), AddressFormat::Old));
     }
 }
 
-fn parse_address_raw<P: PoolParams>(
+pub fn parse_address_raw<P: PoolParams>(
     raw_address: &str,
     params: &P,
 ) -> Result<
@@ -124,7 +135,7 @@ fn parse_address_raw<P: PoolParams>(
 pub fn format_address<P: PoolParams>(
     d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
     p_d: Num<P::Fr>,
-    pool: Option<Pool>,
+    pool: Option<Pool>, // set pool to None to generate universal address for all pools
 ) -> String {
     let mut buf: [u8; ADDR_LEN] = [0; ADDR_LEN];
 
@@ -137,7 +148,9 @@ pub fn format_address<P: PoolParams>(
         Some(pool) => {
             const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
             let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-            pool.pool_id_num::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+            let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
+            let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
+            pool_id_be.serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
             hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&keccak256(&buf[0..42]));
             (keccak256(&hash_src), pool.address_prefix().to_owned())
         },

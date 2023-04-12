@@ -192,15 +192,17 @@ where
 
     pub fn validate_address(&self, address: &str) -> bool {
         match parse_address(address, &self.params) {
-            Ok((_, _, pool)) => {
+            Ok((_, _, pool, _)) => {
                 match pool {
-                    Some(pool) => pool.pool_id() == self.pool.pool_id(),
+                    Some(pool) => pool == self.pool,
                     None => true
                 }
             },
             Err(_) => false,
         }
     }
+
+    //pub fn address_details(&self, address: &str) -> Op
 
     /// Attempts to decrypt notes.
     pub fn decrypt_notes(&self, data: Vec<u8>) -> Vec<Option<Note<P::Fr>>> {
@@ -214,7 +216,7 @@ where
 
     pub fn is_own_address(&self, address: &str) -> bool {
         match parse_address::<P>(address, &self.params) {
-            Ok((d, p_d, pool)) => {
+            Ok((d, p_d, pool, _)) => {
                 let is_our_sk = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x == p_d;
                 let is_correct_pool = match pool {
                     Some(pool) => pool == self.pool,
@@ -380,7 +382,7 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d, pool) = parse_address::<P>(&dest.to, &self.params)?;
+                        let (to_d, to_p_d, pool, _) = parse_address::<P>(&dest.to, &self.params)?;
 
                         if pool.is_none() || pool.unwrap() == self.pool {
                             output_value += dest.amount.to_num();
@@ -709,7 +711,40 @@ mod tests {
     }
 
     #[test]
-    fn test_chain_specific_address() {
+    fn test_chain_specific_addresses() {
+        let acc_polygon = UserAccount::new(Num::ZERO, Pool::Polygon, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_sepolia = UserAccount::new(Num::ZERO, Pool::Sepolia, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism = UserAccount::new(Num::ZERO, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+
+        assert!(acc_polygon.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_polygon.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(!acc_polygon.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+
+        assert!(!acc_sepolia.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_sepolia.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(!acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(!acc_sepolia.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        
+        assert!(!acc_optimism.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(!acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(!acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kR*&**7i"));
+        assert!(!acc_optimism.validate_address("zkbob_zkbober:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism.validate_address("zkbob:optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism.validate_address("zkbob:"));
+        assert!(!acc_optimism.validate_address(":"));
+        assert!(!acc_optimism.validate_address(""));
+
+    }   
+
+    #[test]
+    fn test_chain_specific_address_ownable() {
         let accs = [
             UserAccount::new(Num::ZERO, Pool::Polygon, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
             UserAccount::new(Num::ZERO, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
@@ -717,6 +752,7 @@ mod tests {
             UserAccount::new(Num::ZERO, Pool::Goerli, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
             UserAccount::new(Num::ZERO, Pool::GoerliOptimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
         ];
+        let acc2 = UserAccount::new(Num::ONE, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
         let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
 
@@ -727,10 +763,12 @@ mod tests {
                 } else {
                     assert!(!acc.is_own_address(&addr));
                 }
+                assert!(!acc2.is_own_address(&addr))
             });
 
             universal_addresses.iter().for_each(|addr| {
                 assert!(acc.is_own_address(&addr));
+                assert!(!acc2.is_own_address(&addr))
             });
         });
     }

@@ -25,7 +25,7 @@ impl Pool {
         match pool_id {
             0x000000 => Some(Pool::Polygon),
             0x000001 => Some(Pool::Optimism),
-            0x000002 => Some(Pool::Sepolia),
+            //0x000000 => Some(Pool::Sepolia),  // pool_id duplication, use this method with caution
             0xffff02 => Some(Pool::Goerli),
             0xffff03 => Some(Pool::GoerliOptimism),
             _ => None,
@@ -47,7 +47,7 @@ impl Pool {
         match self {
             Pool::Polygon => 0x000000,
             Pool::Optimism => 0x000001,
-            // here is an issue with Sepolia pool implementation
+            // here is an issue with Sepolia pool deployment
             Pool::Sepolia => 0x000000, 
             Pool::Goerli => 0xffff02,
             Pool::GoerliOptimism => 0xffff03,
