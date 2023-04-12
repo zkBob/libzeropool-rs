@@ -192,7 +192,7 @@ where
 
     pub fn validate_address(&self, address: &str) -> bool {
         match parse_address(address, &self.params) {
-            Ok((_, _, pool, _)) => {
+            Ok((_, _, pool)) => {
                 match pool {
                     Some(pool) => pool == self.pool,
                     None => true
@@ -202,7 +202,22 @@ where
         }
     }
 
-    //pub fn address_details(&self, address: &str) -> Op
+    pub fn is_own_address(&self, address: &str) -> bool {
+        match parse_address::<P>(address, &self.params) {
+            Ok((d, p_d, pool)) => {
+                let is_correct_pool = match pool {
+                    Some(pool) => pool == self.pool,
+                    None => true,
+                };
+                self.is_derived_from_our_sk(d, p_d) && is_correct_pool
+            },
+            Err(_) => false
+        }
+    }
+
+    pub fn is_derived_from_our_sk(&self, d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, p_d: Num<P::Fr>) -> bool {
+        derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x == p_d
+    }
 
     /// Attempts to decrypt notes.
     pub fn decrypt_notes(&self, data: Vec<u8>) -> Vec<Option<Note<P::Fr>>> {
@@ -212,20 +227,6 @@ where
     /// Attempts to decrypt account and notes.
     pub fn decrypt_pair(&self, data: Vec<u8>) -> Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
         cipher::decrypt_out(self.keys.eta, &data, &self.params)
-    }
-
-    pub fn is_own_address(&self, address: &str) -> bool {
-        match parse_address::<P>(address, &self.params) {
-            Ok((d, p_d, pool, _)) => {
-                let is_our_sk = derive_key_p_d(d.to_num(), self.keys.eta, &self.params).x == p_d;
-                let is_correct_pool = match pool {
-                    Some(pool) => pool == self.pool,
-                    None => true,
-                };
-                is_our_sk && is_correct_pool
-            },
-            Err(_) => false
-        }
     }
 
     /// Constructs a transaction.
@@ -382,7 +383,7 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d, pool, _) = parse_address::<P>(&dest.to, &self.params)?;
+                        let (to_d, to_p_d, pool) = parse_address::<P>(&dest.to, &self.params)?;
 
                         if pool.is_none() || pool.unwrap() == self.pool {
                             output_value += dest.amount.to_num();

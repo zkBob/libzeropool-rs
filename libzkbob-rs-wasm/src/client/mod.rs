@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 use std::str::FromStr;
 
+use libzkbob_rs::address::parse_address_ext;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -124,27 +125,34 @@ impl UserAccount {
     }
 
     #[wasm_bindgen(js_name = "parseAddress")]
-    pub fn parse_address_(&self, address: &str) -> IAddressComponents {
-        let (d, p_d, pool, format) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
+    pub fn parse_address(&self, address: &str) -> Result<IAddressComponents, JsValue> {
+        let (d, p_d, pool, format, checksum) = 
+            parse_address_ext::<PoolParams>(address, &POOL_PARAMS).map_err(|err| js_err!(&err.to_string()))?;
 
         #[derive(Serialize)]
         struct Address {
+            format: String,
             d: String,
             p_d: String,
+            checksum: [u8; 4],
             pool_id: String,
-            //format: String,
+            derived_from_our_sk: bool,
+            is_pool_valid: bool,
         }
 
         let address = Address {
+            format: format.name().to_string(),
             d: d.to_num().to_string(),
             p_d: p_d.to_string(),
-            pool_id: if let Some(pool) = pool { format!("{}", pool.pool_id()) } else { "".to_string() },
-            //format: format.try_into().unwrap(),
+            checksum,
+            pool_id: if let Some(pool) = pool { format!("{}", pool.pool_id()) } else { "any".to_string() },
+            derived_from_our_sk: self.inner.borrow().is_derived_from_our_sk(d, p_d),
+            is_pool_valid: if let Some(pool) = pool { pool == self.inner.borrow().pool } else { true },
         };
 
-        serde_wasm_bindgen::to_value(&address)
+        Ok(serde_wasm_bindgen::to_value(&address)
             .unwrap()
-            .unchecked_into::<IAddressComponents>()
+            .unchecked_into::<IAddressComponents>())
     }
 
     #[wasm_bindgen(js_name = "decryptNotes")]

@@ -38,6 +38,16 @@ pub enum AddressFormat {
     Generic,
 }
 
+impl AddressFormat {
+    pub fn name(&self) -> &str {
+        match self {
+            AddressFormat::Old => "old",
+            AddressFormat::PoolSpecific => "pool",
+            AddressFormat::Generic => "generic",
+        }
+    }
+}
+
 pub fn parse_address<P: PoolParams>(
     address: &str,
     params: &P,
@@ -46,7 +56,23 @@ pub fn parse_address<P: PoolParams>(
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
         Num<P::Fr>, // p_d
         Option<Pool>,   // None for generic addresses
+    ),
+    AddressParseError,
+>{
+    let (d, p_d, pool, _, _) = parse_address_ext(address, params)?;
+    Ok((d, p_d, pool))
+}
+
+pub fn parse_address_ext<P: PoolParams>(
+    address: &str,
+    params: &P,
+) -> Result<
+    (
+        BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
+        Num<P::Fr>, // p_d
+        Option<Pool>,   // None for generic addresses
         AddressFormat,
+        [u8; 4],    // checksum
     ),
     AddressParseError,
 >{
@@ -73,7 +99,7 @@ pub fn parse_address<P: PoolParams>(
                     if keccak256(&hash_src)[0..=3] != checksum {
                         return Err(AddressParseError::InvalidChecksum);
                     }
-                    return Ok((d, p_d, Some(pool), AddressFormat::PoolSpecific));
+                    return Ok((d, p_d, Some(pool), AddressFormat::PoolSpecific, checksum));
                 },
                 None => {
                     if addr_components[0].to_lowercase() == GENERIC_ADDRESS_PREFIX {
@@ -81,7 +107,7 @@ pub fn parse_address<P: PoolParams>(
                         if &addr_hash[0..=3] != checksum {
                             return Err(AddressParseError::InvalidChecksum);
                         }
-                        return Ok((d, p_d, None, AddressFormat::Generic));
+                        return Ok((d, p_d, None, AddressFormat::Generic, checksum));
                     } else {
                         return Err(AddressParseError::InvalidPrefix(addr_components[0].to_string()))
                     }
@@ -102,11 +128,11 @@ pub fn parse_address<P: PoolParams>(
         }
 
         // the old format should be acceptable on the Polygon BOB pool only
-        return Ok((d, p_d, Some(Pool::Polygon), AddressFormat::Old));
+        return Ok((d, p_d, Some(Pool::Polygon), AddressFormat::Old, checksum));
     }
 }
 
-pub fn parse_address_raw<P: PoolParams>(
+fn parse_address_raw<P: PoolParams>(
     raw_address: &str,
     params: &P,
 ) -> Result<

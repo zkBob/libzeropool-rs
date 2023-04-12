@@ -70,16 +70,20 @@ impl Pool {
             Pool::GoerliOptimism => "zkbob_goerli_optimism",
         }
     }
+
+    pub fn human_readable(&self) -> &str {
+        match self {
+            Pool::Polygon => "BOB on Polygon",
+            Pool::Optimism => "BOB on Optimism",
+            Pool::Sepolia => "BOB on Sepolia testnet",
+            Pool::Goerli => "BOB on Goerli testnet",
+            Pool::GoerliOptimism => "BOB on Goerli Optimism testnet",
+        }
+    }
 }
 
 impl fmt::Display for Pool {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Pool::Polygon => write!(f, "BOB on Polygon"),
-            Pool::Optimism => write!(f, "BOB on Optimism"),
-            Pool::Sepolia => write!(f, "BOB on Sepolia testnet"),
-            Pool::Goerli => write!(f, "BOB on Goerli testnet"),
-            Pool::GoerliOptimism => write!(f, "BOB on Goerli Optimism testnet"),
-        }
+        write!(f, "{}", self.human_readable())
     }
 }
