@@ -128,7 +128,7 @@ pub fn parse_address_ext<P: PoolParams>(
         }
 
         // the old format should be acceptable on the Polygon BOB pool only
-        return Ok((d, p_d, Some(Pool::Polygon), AddressFormat::Old, checksum));
+        return Ok((d, p_d, Some(Pool::PolygonBOB), AddressFormat::Old, checksum));
     }
 }
 

@@ -68,10 +68,10 @@ impl UserAccount {
     pub fn new(sk: &[u8], pool_id: u32, state: UserState, network: &str) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
-        let pool = if network.to_lowercase() == "sepolia" && pool_id == Pool::Sepolia.pool_id() {
+        let pool = if network.to_lowercase() == "sepolia" && pool_id == Pool::SepoliaBOB.pool_id() {
             // A workaround related with Sepolia pool_id issue
             // (pool_id for Sepolia BOB pool is equal to Polygon BOB pool)
-            Ok(Pool::Sepolia)
+            Ok(Pool::SepoliaBOB)
         } else {
             Pool::from_pool_id(pool_id)
                 .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))
@@ -122,6 +122,14 @@ impl UserAccount {
         let p_d = Num::from_str(p_d).unwrap();
 
         self.inner.borrow().generate_address_from_components(d, p_d)
+    }
+
+    #[wasm_bindgen(js_name = "convertAddressToChainSpecific")]
+    pub fn convert_address_to_chain_specific(&self, address: &str) -> Result<String, JsValue> {
+        let (d, p_d, _) = 
+            parse_address::<PoolParams>(address, &POOL_PARAMS).map_err(|err| js_err!(&err.to_string()))?;
+
+        Ok(self.inner.borrow().generate_address_from_components(d, p_d))
     }
 
     #[wasm_bindgen(js_name = "parseAddress")]

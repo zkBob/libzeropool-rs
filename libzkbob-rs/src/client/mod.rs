@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::PolygonBOB, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
@@ -630,7 +630,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::PolygonBOB, state, POOL_PARAMS.clone());
 
         acc.create_tx(
             TxType::Deposit(
@@ -648,7 +648,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::PolygonBOB, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -669,7 +669,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::Polygon, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, Pool::PolygonBOB, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -690,13 +690,13 @@ mod tests {
     fn test_user_account_is_own_address() {
         let acc_1 = UserAccount::new(
             Num::ZERO,
-            Pool::Goerli,
+            Pool::GoerliBOB,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
-            Pool::Goerli,
+            Pool::GoerliBOB,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
@@ -713,9 +713,10 @@ mod tests {
 
     #[test]
     fn test_chain_specific_addresses() {
-        let acc_polygon = UserAccount::new(Num::ZERO, Pool::Polygon, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_sepolia = UserAccount::new(Num::ZERO, Pool::Sepolia, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism = UserAccount::new(Num::ZERO, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_polygon = UserAccount::new(Num::ZERO, Pool::PolygonBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_sepolia = UserAccount::new(Num::ZERO, Pool::SepoliaBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism = UserAccount::new(Num::ZERO, Pool::OptimismBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism_eth = UserAccount::new(Num::ZERO, Pool::OptimismETH, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
 
         assert!(acc_polygon.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(acc_polygon.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
@@ -742,18 +743,25 @@ mod tests {
         assert!(!acc_optimism.validate_address(":"));
         assert!(!acc_optimism.validate_address(""));
 
+        assert!(!acc_optimism_eth.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_address("zkbob_optimism_eth:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse1j9diw"));
+        assert!(!acc_optimism_eth.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(!acc_optimism_eth.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism_eth.validate_address("zkbob_optimism_eth:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
     }   
 
     #[test]
     fn test_chain_specific_address_ownable() {
         let accs = [
-            UserAccount::new(Num::ZERO, Pool::Polygon, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::Sepolia, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::Goerli, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::GoerliOptimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::PolygonBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::OptimismBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::OptimismETH, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::SepoliaBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::GoerliBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, Pool::GoerliOptimismBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
         ];
-        let acc2 = UserAccount::new(Num::ONE, Pool::Optimism, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc2 = UserAccount::new(Num::ONE, Pool::OptimismBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
         let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
 
