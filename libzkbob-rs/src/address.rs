@@ -104,7 +104,7 @@ pub fn parse_address_ext<P: PoolParams>(
                 None => {
                     if addr_components[0].to_lowercase() == GENERIC_ADDRESS_PREFIX {
                         // generic address
-                        if &addr_hash[0..=3] != checksum {
+                        if addr_hash[0..=3] != checksum {
                             return Err(AddressParseError::InvalidChecksum);
                         }
                         return Ok((d, p_d, None, AddressFormat::Generic, checksum));
@@ -115,7 +115,7 @@ pub fn parse_address_ext<P: PoolParams>(
             };
         }
 
-        return Err(AddressParseError::InvalidFormat);
+        Err(AddressParseError::InvalidFormat)
     } else {
         // old format without prefix
         let (d,
@@ -123,12 +123,12 @@ pub fn parse_address_ext<P: PoolParams>(
             addr_hash,
             checksum) = parse_address_raw(address, params)?;
         
-        if &addr_hash[0..=3] != checksum {
+        if addr_hash[0..=3] != checksum {
             return Err(AddressParseError::InvalidChecksum);
         }
 
         // the old format should be acceptable on the Polygon BOB pool only
-        return Ok((d, p_d, Some(Pool::PolygonBOB), AddressFormat::Old, checksum));
+        Ok((d, p_d, Some(Pool::PolygonBOB), AddressFormat::Old, checksum))
     }
 }
 
