@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt;
 
 use libzeropool::native::boundednum::BoundedNum;
@@ -65,6 +66,17 @@ impl Pool {
         let pool_id_num = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id as u64))).unwrap();
 
         BoundedNum::new(pool_id_num)
+    }
+
+    pub fn pool_id_bytes_be<Fr: PrimeField>(&self) -> [u8; POOL_ID_BITS >> 3] {
+        const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
+        let pool_id = self.pool_id();
+        let pool_id_num = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id as u64))).unwrap();
+        
+        let pool_id_bytes = pool_id_num.to_uint().0.to_big_endian();
+        let pool_id_be: [u8; POOL_ID_BYTES] = pool_id_bytes[32 - POOL_ID_BYTES..32].try_into().unwrap();
+
+        pool_id_be
     }
 
     pub fn address_prefix(&self) -> &str {

@@ -91,9 +91,7 @@ pub fn parse_address_ext<P: PoolParams>(
                     // pool-specific address
                     const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
                     let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-                    let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
-                    let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
-                    pool_id_be.serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+                    pool.pool_id_bytes_be::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
                     hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
 
                     if keccak256(&hash_src)[0..=3] != checksum {
@@ -174,9 +172,9 @@ pub fn format_address<P: PoolParams>(
         Some(pool) => {
             const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
             let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-            let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
-            let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
-            pool_id_be.serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+            //let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
+            //let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
+            pool.pool_id_bytes_be::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
             hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&keccak256(&buf[0..42]));
             (keccak256(&hash_src), pool.address_prefix().to_owned())
         },
