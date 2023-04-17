@@ -1,5 +1,6 @@
 pub use libzeropool;
 
+pub mod pools;
 pub mod address;
 pub mod client;
 pub mod delegated_deposit;
