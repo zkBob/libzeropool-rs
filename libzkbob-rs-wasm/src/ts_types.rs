@@ -106,8 +106,13 @@ export interface VK {
 }
 
 export interface IAddressComponents {
+    format: string;
     d: string;
     p_d: string;
+    checksum: Uint8Array;
+    pool_id: string;
+    derived_from_our_sk: boolean;
+    is_pool_valid: boolean;
 }
 
 export interface ITxBaseFields {
