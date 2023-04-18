@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
+use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, ec_points::ECPointsFormat, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
 use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_FLAG};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
@@ -100,7 +100,7 @@ impl TxParser {
                 let memo = hex::decode(memo).unwrap();
                 let commitment = hex::decode(commitment).unwrap();
                 
-                parse_tx(index, &commitment, &memo, None, &eta, params)
+                parse_tx(index, &commitment, &memo, None, &eta, params, Default::default())
             })
             .partition(Result::is_ok);
 
@@ -145,7 +145,8 @@ pub fn parse_tx(
     memo: &Vec<u8>,
     tx_hash: Option<&Vec<u8>>,
     eta: &Num<Fr>,
-    params: &PoolParams
+    params: &PoolParams,
+    ec_points_format: ECPointsFormat,
 ) -> Result<ParseResult, ParseError> {
     if memo.len() < 4 {
         return Err(ParseError::NoPrefix(index))
@@ -231,7 +232,7 @@ pub fn parse_tx(
             .take(num_hashes as usize)
             .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))));
     
-        let pair = cipher::decrypt_out(*eta, &memo, params);
+        let pair = cipher::decrypt_out(*eta, &memo, params, ec_points_format);
 
         match pair {
             Some((account, notes)) => {        
@@ -268,7 +269,7 @@ pub fn parse_tx(
                 })
             },
             None => {
-                let in_notes: Vec<(_, _)> = cipher::decrypt_in(*eta, &memo, params)
+                let in_notes: Vec<(_, _)> = cipher::decrypt_in(*eta, &memo, params, ec_points_format)
                     .into_iter()
                     .enumerate()
                     .filter_map(|(i, note)| {
