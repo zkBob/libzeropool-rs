@@ -1,15 +1,11 @@
-use std::str::FromStr;
-
 use libzkbob_rs::libzeropool::{
     constants,
-    fawkes_crypto::{backend::bellman_groth16::engines::Bn256, ff_uint::Num},
+    fawkes_crypto::{backend::bellman_groth16::engines::Bn256},
     native::{
-        boundednum::BoundedNum,
         params::{PoolBN256, PoolParams as PoolParamsTrait},
     },
     POOL_PARAMS,
 };
-use libzkbob_rs::address::{format_address, parse_address};
 use serde::Serialize;
 use wasm_bindgen::{prelude::*, JsCast};
 
@@ -72,38 +68,4 @@ pub fn get_constants() -> Constants {
     serde_wasm_bindgen::to_value(&*CONSTANTS)
         .unwrap()
         .unchecked_into::<Constants>()
-}
-
-#[wasm_bindgen(js_name = "validateAddress")]
-pub fn validate_address(address: &str) -> bool {
-    parse_address::<PoolParams>(address, &POOL_PARAMS).is_ok()
-}
-
-#[wasm_bindgen(js_name = "assembleAddress")]
-pub fn assemble_address(d: &str, p_d: &str) -> String {
-    let d = Num::from_str(d).unwrap();
-    let d = BoundedNum::new(d);
-    let p_d = Num::from_str(p_d).unwrap();
-
-    format_address::<PoolParams>(d, p_d)
-}
-
-#[wasm_bindgen(js_name = "parseAddress")]
-pub fn parse_address_(address: &str) -> IAddressComponents {
-    let (d, p_d) = parse_address::<PoolParams>(address, &POOL_PARAMS).unwrap();
-
-    #[derive(Serialize)]
-    struct Address {
-        d: String,
-        p_d: String,
-    }
-
-    let address = Address {
-        d: d.to_num().to_string(),
-        p_d: p_d.to_string(),
-    };
-
-    serde_wasm_bindgen::to_value(&address)
-        .unwrap()
-        .unchecked_into::<IAddressComponents>()
 }

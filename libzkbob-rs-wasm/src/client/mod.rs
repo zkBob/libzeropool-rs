@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
+use std::str::FromStr;
 
-use libzkbob_rs::libzeropool::native::tx::nullifier;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -11,32 +11,35 @@ use libzkbob_rs::libzeropool::{
     constants,
     fawkes_crypto::{
         core::sizedvec::SizedVec,
-        ff_uint::Num,
-        ff_uint::{NumRepr, Uint},
+        ff_uint::{Num, NumRepr, Uint},
         borsh::BorshDeserialize,
     },
     native::{
         account::Account as NativeAccount,
         note::Note as NativeNote,
-        tx::{parse_delta, TransferPub as NativeTransferPub, TransferSec as NativeTransferSec}
+        boundednum::BoundedNum,
+        tx::{parse_delta, nullifier, TransferPub as NativeTransferPub, TransferSec as NativeTransferSec}
     },
 };
 use libzkbob_rs::{
     client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
-    merkle::{Hash, Node}
+    merkle::{Hash, Node},
+    address::{parse_address, parse_address_ext},
+    pools::Pool
 };
-use serde::{Serialize};
+
+use serde::Serialize;
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::{ParseTxsColdStorageResult, TxInput, TxInputNodes, IndexedAccount};
+use crate::{ParseTxsColdStorageResult, IAddressComponents, TxInput, TxInputNodes, IndexedAccount};
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
 use crate::helpers::vec_into_iter;
 use crate::ts_types::Hash as JsHash;
 use crate::{
-    keys::reduce_sk, Account, Fr, Fs, Hashes, 
+    Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, PoolParams, Transaction, UserState, POOL_PARAMS,
     MerkleProof, Pair, TreeNode, TreeNodes,
@@ -61,36 +64,102 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_id: u32, state: UserState, network: &str) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
-        if pool_id >= 1 << 24 {
-            return Err(js_err!("PoolID should be less than {}", 1 << 24));
-        }
+        let pool = if network.to_lowercase() == "sepolia" && pool_id == Pool::SepoliaBOB.pool_id() {
+            // A workaround related with Sepolia pool_id issue
+            // (pool_id for Sepolia BOB pool is equal to Polygon BOB pool)
+            Ok(Pool::SepoliaBOB)
+        } else {
+            Pool::from_pool_id(pool_id)
+                .ok_or_else(|| js_err!("Unsupported pool with ID {}", pool_id))
+        }?;
+            
+        UserAccount::create_internal(sk, pool, state)
+    }
+
+    fn create_internal(sk: &[u8], pool: Pool, state: UserState) -> Result<UserAccount, JsValue> {
+        crate::utils::set_panic_hook();
+
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
-        let pool_id = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(pool_id)))
-            .ok_or_else(|| js_err!("Invalid pool id"))?;
-            
-        let account = NativeUserAccount::new(sk, pool_id, state.inner, POOL_PARAMS.clone());
+
+        let account = NativeUserAccount::new(sk, pool, state.inner, POOL_PARAMS.clone());
 
         Ok(UserAccount {
             inner: Rc::new(RefCell::new(account)),
         })
     }
 
-    // TODO: Is this safe?
-    #[wasm_bindgen(js_name = fromSeed)]
-    /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: u64, state: UserState) -> Result<UserAccount, JsValue> {
-        let sk = reduce_sk(seed);
-        Self::new(&sk, pool_id, state)
-    }
-
-    #[wasm_bindgen(js_name = generateAddress)]
-    /// Generates a new private address.
+    #[wasm_bindgen(js_name = "generateAddress")]
+    /// Generates a new private address for the current pool
     pub fn generate_address(&self) -> String {
         self.inner.borrow().generate_address()
+    }
+
+    #[wasm_bindgen(js_name = "generateUniversalAddress")]
+    /// Generates a new private address for any pool
+    pub fn generate_universal_address(&self) -> String {
+        self.inner.borrow().generate_universal_address()
+    }
+
+    #[wasm_bindgen(js_name = "generateAddressForSeed")]
+    pub fn generate_address_for_seed(&self, seed: &[u8]) -> String {
+        self.inner.borrow().gen_address_for_seed(seed)
+    }
+
+    #[wasm_bindgen(js_name = "validateAddress")]
+    pub fn validate_address(&self, address: &str) -> bool {
+        self.inner.borrow().validate_address(address)
+    }
+
+    #[wasm_bindgen(js_name = "assembleAddress")]
+    pub fn assemble_address(&self, d: &str, p_d: &str) -> String {
+        let d = Num::from_str(d).unwrap();
+        let d = BoundedNum::new(d);
+        let p_d = Num::from_str(p_d).unwrap();
+
+        self.inner.borrow().generate_address_from_components(d, p_d)
+    }
+
+    #[wasm_bindgen(js_name = "convertAddressToChainSpecific")]
+    pub fn convert_address_to_chain_specific(&self, address: &str) -> Result<String, JsValue> {
+        let (d, p_d, _) = 
+            parse_address::<PoolParams>(address, &POOL_PARAMS).map_err(|err| js_err!(&err.to_string()))?;
+
+        Ok(self.inner.borrow().generate_address_from_components(d, p_d))
+    }
+
+    #[wasm_bindgen(js_name = "parseAddress")]
+    pub fn parse_address(&self, address: &str) -> Result<IAddressComponents, JsValue> {
+        let (d, p_d, pool, format, checksum) = 
+            parse_address_ext::<PoolParams>(address, &POOL_PARAMS).map_err(|err| js_err!(&err.to_string()))?;
+
+        #[derive(Serialize)]
+        struct Address {
+            format: String,
+            d: String,
+            p_d: String,
+            checksum: [u8; 4],
+            pool_id: String,
+            derived_from_our_sk: bool,
+            is_pool_valid: bool,
+        }
+
+        let address = Address {
+            format: format.name().to_string(),
+            d: d.to_num().to_string(),
+            p_d: p_d.to_string(),
+            checksum,
+            pool_id: if let Some(pool) = pool { format!("{}", pool.pool_id()) } else { "any".to_string() },
+            derived_from_our_sk: self.inner.borrow().is_derived_from_our_sk(d, p_d),
+            is_pool_valid: if let Some(pool) = pool { pool == self.inner.borrow().pool } else { true },
+        };
+
+        Ok(serde_wasm_bindgen::to_value(&address)
+            .unwrap()
+            .unchecked_into::<IAddressComponents>())
     }
 
     #[wasm_bindgen(js_name = "calculateNullifier")]
@@ -112,7 +181,6 @@ impl UserAccount {
                     .unwrap()
                     .unchecked_into::<JsHash>())
     }
-
 
     #[wasm_bindgen(js_name = decryptNotes)]
     /// Attempts to decrypt notes.
@@ -137,7 +205,7 @@ impl UserAccount {
         Ok(notes)
     }
 
-    #[wasm_bindgen(js_name = decryptPair)]
+    #[wasm_bindgen(js_name = "decryptPair")]
     /// Attempts to decrypt account and notes.
     pub fn decrypt_pair(&self, data: Vec<u8>) -> Result<Option<Pair>, JsValue> {
         #[derive(Serialize)]

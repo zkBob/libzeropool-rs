@@ -170,7 +170,6 @@ impl<Fr: PrimeField> DelegatedDepositData<Fr> {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-
     use super::*;
 
     #[test]
