@@ -752,7 +752,12 @@ mod tests {
         let params = POOL_PARAMS.clone();
         let mut rng = CustomRng;
         let state = State::init_test(POOL_PARAMS.clone());
-        let mut user_account = UserAccount::new(Num::ZERO, Num::ZERO, state, POOL_PARAMS.clone());
+        let mut user_account = UserAccount::new(
+            Num::ZERO,
+            Pool::OptimismBOB,
+            state,
+            POOL_PARAMS.clone()
+        );
 
         let mut acc0 = Account::sample(&mut rng, &params);
         acc0.i = BoundedNum::new(Num::from_str("0").unwrap());
