@@ -27,8 +27,8 @@ impl From<Params> for Parameters<Engine> {
 #[wasm_bindgen]
 impl Params {
     #[wasm_bindgen(js_name = "fromBinary")]
-    pub fn from_binary(input: &[u8], precompute: bool) -> Result<Params, JsValue> {
-        Self::from_binary_ext(input, true, true, precompute)
+    pub fn from_binary(input: &[u8]) -> Result<Params, JsValue> {
+        Self::from_binary_ext(input, true, true, false)
     }
 
     #[wasm_bindgen(js_name = "fromBinaryExtended")]
