@@ -312,7 +312,6 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "createTransferOptimistic")]
     pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: &JsValue) -> Result<Promise, JsValue> {
-        //let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         let new_state: StateUpdate = serde_wasm_bindgen::from_value(new_state.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         Ok(self.construct_tx_data(transfer.to_native()?, Some(new_state)))
     }
@@ -324,7 +323,6 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "createWithdrawalOptimistic")]
     pub fn create_withdraw_optimistic(&self, withdraw: IWithdrawData, new_state: &JsValue) -> Result<Promise, JsValue> {
-        //let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         let new_state: StateUpdate = serde_wasm_bindgen::from_value(new_state.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         Ok(self.construct_tx_data(withdraw.to_native()?, Some(new_state)))
     }
@@ -407,10 +405,8 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "updateState")]
     pub fn update_state(&mut self, state_update: &JsValue, siblings: Option<TreeNodes>) -> Result<(), JsValue> {
-        //let state_update: StateUpdate = state_update.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         let state_update: StateUpdate = serde_wasm_bindgen::from_value(state_update.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         let siblings: Option<Vec<Node<Fr>>> = match siblings {
-            //Some(val) => val.into_serde().map_err(|err| js_err!(&err.to_string()))?,
             Some(val) => serde_wasm_bindgen::from_value(val.unchecked_into()).map_err(|err| js_err!(&err.to_string()))?,
             None => None
         };

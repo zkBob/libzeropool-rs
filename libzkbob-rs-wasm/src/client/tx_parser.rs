@@ -129,7 +129,6 @@ impl TxParser {
         let params = &self.params;
         let eta = Keys::derive(sk, params).eta;
 
-        //let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
         let txs: Vec<IndexedTx> = serde_wasm_bindgen::from_value(txs.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
 
         let (parse_results, parse_errors): (Vec<_>, Vec<_>) = vec_into_iter(txs)
