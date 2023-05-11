@@ -16,14 +16,16 @@ use libzeropool::{
         note::Note,
         params::PoolParams,
         tx::{
-            make_delta, nullifier, out_commitment_hash, tx_hash, tx_sign, TransferPub, TransferSec,
+            make_delta, nullifier, nullifier_intermediate_hash,
+            out_commitment_hash, tx_hash, tx_sign,
+            TransferPub, TransferSec,
             Tx,
         },
     },
 };
 
 use serde::{Deserialize, Serialize};
-use std::{convert::TryInto, io::Write};
+use std::{convert::TryInto, io::Write, ops::Range};
 use thiserror::Error;
 
 use self::state::{State, Transaction};
@@ -76,6 +78,13 @@ pub struct TransactionData<Fr: PrimeField> {
     pub memo: Vec<u8>,
     pub commitment_root: Num<Fr>,
     pub out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TransactionInputs<Fr: PrimeField> {
+    pub account: (u64, Account<Fr>),
+    pub intermediate_nullifier: Num<Fr>,   // intermediate nullifier hash
+    pub notes: Vec<(u64, Note<Fr>)>,
 }
 
 pub type TokenAmount<Fr> = BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }>;
@@ -229,6 +238,19 @@ where
         cipher::decrypt_out(self.keys.eta, &data, &self.params)
     }
 
+    fn initial_account(&self) -> Account<P::Fr> {
+        // Initial account should have d = pool_id to protect from reply attacks
+        let d = self.pool.pool_id_num().to_num();
+        let p_d = derive_key_p_d(d, self.keys.eta, &self.params).x;
+        Account {
+            d: BoundedNum::new(d),
+            p_d,
+            i: BoundedNum::new(Num::ZERO),
+            b: BoundedNum::new(Num::ZERO),
+            e: BoundedNum::new(Num::ZERO),
+        }
+    }
+
     /// Constructs a transaction.
     pub fn create_tx(
         &self,
@@ -260,18 +282,7 @@ where
 
         // initial input account (from non-optimistic state)
         let in_account = in_account_optimistic.unwrap_or_else(|| {
-            state.latest_account.unwrap_or_else(|| {
-                // Initial account should have d = pool_id to protect from reply attacks
-                let d = self.pool.pool_id_num().to_num();
-                let p_d = derive_key_p_d(d, self.keys.eta, &self.params).x;
-                Account {
-                    d: BoundedNum::new(d),
-                    p_d,
-                    i: BoundedNum::new(Num::ZERO),
-                    b: BoundedNum::new(Num::ZERO),
-                    e: BoundedNum::new(Num::ZERO),
-                }
-            })
+            state.latest_account.unwrap_or_else(|| self.initial_account())
         });
 
         let tree = &self.state.tree;
@@ -603,12 +614,37 @@ where
             out_hashes,
         })
     }
+
+    pub fn get_tx_input(&self, index: u64) -> Option<TransactionInputs<P::Fr>> {
+        let account = match self.state.get_account(index) {
+            Some(acc) => acc,
+            _ => return None,
+        };
+
+        let input_acc = self.state.get_previous_account(index).unwrap_or_else(|| (0, self.initial_account()));
+        let note_lower_bound = input_acc.1.i.to_num().try_into().unwrap();
+        let note_upper_bound = account.i.to_num().try_into().unwrap();
+        let notes_range: Range<u64> = note_lower_bound..note_upper_bound;
+        let input_notes = self.state.get_notes_in_range(notes_range);
+
+        let params = &self.params;
+        let inh = nullifier_intermediate_hash(input_acc.1.hash(params), self.keys.eta, index.into(), params);
+
+        Some(TransactionInputs {
+            account: input_acc,
+            intermediate_nullifier: inh,
+            notes: input_notes,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use libzeropool::POOL_PARAMS;
+    use crate::random::CustomRng;
 
     #[test]
     fn test_create_tx_deposit_zero() {
@@ -709,6 +745,63 @@ mod tests {
 
         assert!(!acc_1.is_own_address(&address_2));
         assert!(!acc_2.is_own_address(&address_1));
+    }
+
+    #[test]
+    fn test_tx_inputs() {
+        let params = POOL_PARAMS.clone();
+        let mut rng = CustomRng;
+        let state = State::init_test(POOL_PARAMS.clone());
+        let mut user_account = UserAccount::new(
+            Num::ZERO,
+            Pool::OptimismBOB,
+            state,
+            POOL_PARAMS.clone()
+        );
+
+        let mut acc0 = Account::sample(&mut rng, &params);
+        acc0.i = BoundedNum::new(Num::from_str("0").unwrap());
+        let mut acc1 = Account::sample(&mut rng, &params);
+        acc1.i = BoundedNum::new(Num::from_str("51").unwrap());
+        let mut acc2 = Account::sample(&mut rng, &params);
+        acc2.i = BoundedNum::new(Num::from_str("259").unwrap());
+
+        let note0 = (50, Note::sample(&mut rng, &params));
+        let note1 = (257, Note::sample(&mut rng, &params));
+        let note2 = (258, Note::sample(&mut rng, &params));
+        let note3 = (259, Note::sample(&mut rng, &params));
+        let note4 = (300, Note::sample(&mut rng, &params));
+        let note5 = (666, Note::sample(&mut rng, &params));
+
+        user_account.state.add_account(0, acc0);
+        user_account.state.add_account(128, acc1);
+        user_account.state.add_note(note0.0, note0.1);
+        user_account.state.add_note(note1.0, note1.1);
+        user_account.state.add_note(note2.0, note2.1);
+        user_account.state.add_note(note3.0, note3.1);
+        user_account.state.add_note(note4.0, note4.1);
+        user_account.state.add_note(note5.0, note5.1);
+        user_account.state.add_account(1024, acc2);
+
+        (0..10).into_iter().for_each(|idx| {
+            user_account.state.add_note(1024 + idx + 1, Note::sample(&mut rng, &params))
+        });
+
+        let inputs0 = user_account.get_tx_input(0).unwrap();
+        assert!(inputs0.account.1 == user_account.initial_account());
+        assert_eq!(inputs0.notes.len(), 0);
+
+        let inputs1 = user_account.get_tx_input(128).unwrap();
+        assert!(inputs1.account.1 == acc0);
+        assert_eq!(inputs1.notes.len(), 1);
+        assert!(inputs1.notes.contains(&note0));
+
+        let inputs2 = user_account.get_tx_input(1024).unwrap();
+        assert!(inputs2.account.1 == acc1);
+        assert_eq!(inputs2.notes.len(), 2);
+        assert!(inputs2.notes.contains(&note1));
+        assert!(inputs2.notes.contains(&note2));
+
     }
 
     #[test]

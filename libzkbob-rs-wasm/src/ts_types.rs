@@ -1,4 +1,8 @@
-use libzkbob_rs::libzeropool::native::note::Note as NativeNote;
+use fawkes_crypto::ff_uint::Num;
+use libzkbob_rs::libzeropool::native::{
+    note::Note as NativeNote,
+    account::Account as NativeAccount,
+};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -21,11 +25,11 @@ export interface Note {
 }
 
 export interface Account {
-    eta: string;
+    d: string;
+    p_d: string;
     i: string;
     b: string;
     e: string;
-    t: string;
 }
 
 export interface TransferPub {
@@ -173,6 +177,18 @@ export interface ParseTxsColdStorageResult {
     decryptedLeafsCnt: number;
 }
 
+export interface TxMemoChunk {
+    index: number;
+    encrypted: Uint8Array;
+    key: Uint8Array;
+}
+
+export interface TxInput {
+    account: { index: number, account: Account };
+    intermediateNullifier: string
+    notes: { index: number, note: Note }[];
+}
+
 "#;
 
 #[wasm_bindgen]
@@ -282,14 +298,34 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "ParseTxsColdStorageResult")]
     pub type ParseTxsColdStorageResult;
 
+    #[wasm_bindgen(typescript_type = "TxMemoChunk")]
+    pub type TxMemoChunk;
+
+    #[wasm_bindgen(typescript_type = "TxInput")]
+    pub type TxInput;
+
     #[wasm_bindgen(typescript_type = "IAddressComponents")]
     pub type IAddressComponents;
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct IndexedAccount {
+    pub index: u64,
+    pub account: NativeAccount<Fr>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexedNote {
     pub index: u64,
     pub note: NativeNote<Fr>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TxInputNodes {
+    pub account: IndexedAccount,
+    #[serde(rename = "intermediateNullifier")]
+    pub intermediate_nullifier: Num<Fr>,   // intermediate nullifier hash
+    pub notes: Vec<IndexedNote>,
 }
 
 #[derive(Serialize, Deserialize)]

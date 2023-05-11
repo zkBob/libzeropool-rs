@@ -2,7 +2,6 @@ use std::convert::{TryInto};
 
 use crate::pools::Pool;
 use crate::{utils::keccak256, pools::{GENERIC_ADDRESS_PREFIX, POOL_ID_BITS}};
-use libzeropool::fawkes_crypto::ff_uint::Uint;
 use libzeropool::{
     constants,
     fawkes_crypto::{
