@@ -3,7 +3,6 @@ use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 use std::str::FromStr;
 
-use libzkbob_rs::address::parse_address_ext;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -19,13 +18,13 @@ use libzkbob_rs::libzeropool::{
         account::Account as NativeAccount,
         note::Note as NativeNote,
         boundednum::BoundedNum,
-        tx::{parse_delta, TransferPub as NativeTransferPub, TransferSec as NativeTransferSec}
+        tx::{parse_delta, nullifier, TransferPub as NativeTransferPub, TransferSec as NativeTransferSec}
     },
 };
 use libzkbob_rs::{
     client::{TxType as NativeTxType, UserAccount as NativeUserAccount, StateFragment},
     merkle::{Hash, Node},
-    address::parse_address,
+    address::{parse_address, parse_address_ext},
     pools::Pool
 };
 
@@ -33,7 +32,7 @@ use serde::Serialize;
 use wasm_bindgen::{prelude::*, JsCast };
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::{ParseTxsColdStorageResult, IAddressComponents};
+use crate::{ParseTxsColdStorageResult, IAddressComponents, TxInput, TxInputNodes, IndexedAccount};
 use crate::client::tx_parser::StateUpdate;
 
 use crate::database::Database;
@@ -163,7 +162,27 @@ impl UserAccount {
             .unchecked_into::<IAddressComponents>())
     }
 
-    #[wasm_bindgen(js_name = "decryptNotes")]
+    #[wasm_bindgen(js_name = "calculateNullifier")]
+    /// Calculate nullifier from the account
+    pub fn calculate_nullifier(&self, account: Account, index: u64) -> Result<JsHash, JsValue> {
+        let in_account: NativeAccount<Fr> = serde_wasm_bindgen::from_value(account.into())?;
+
+        let params = &self.inner.borrow().params;
+        let eta = &self.inner.borrow().keys.eta;
+        let in_account_hash = in_account.hash(params);
+        let nullifier = nullifier(
+            in_account_hash,
+            *eta,
+            index.into(),
+            params,
+        );
+
+        Ok(serde_wasm_bindgen::to_value(&nullifier)
+                    .unwrap()
+                    .unchecked_into::<JsHash>())
+    }
+
+    #[wasm_bindgen(js_name = decryptNotes)]
     /// Attempts to decrypt notes.
     pub fn decrypt_notes(&self, data: Vec<u8>) -> Result<IndexedNotes, JsValue> {
         let notes = self
@@ -293,7 +312,7 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "createTransferOptimistic")]
     pub fn create_tranfer_optimistic(&self, transfer: ITransferData, new_state: &JsValue) -> Result<Promise, JsValue> {
-        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        let new_state: StateUpdate = serde_wasm_bindgen::from_value(new_state.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         Ok(self.construct_tx_data(transfer.to_native()?, Some(new_state)))
     }
 
@@ -304,7 +323,7 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "createWithdrawalOptimistic")]
     pub fn create_withdraw_optimistic(&self, withdraw: IWithdrawData, new_state: &JsValue) -> Result<Promise, JsValue> {
-        let new_state: StateUpdate = new_state.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        let new_state: StateUpdate = serde_wasm_bindgen::from_value(new_state.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         Ok(self.construct_tx_data(withdraw.to_native()?, Some(new_state)))
     }
 
@@ -386,9 +405,9 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "updateState")]
     pub fn update_state(&mut self, state_update: &JsValue, siblings: Option<TreeNodes>) -> Result<(), JsValue> {
-        let state_update: StateUpdate = state_update.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        let state_update: StateUpdate = serde_wasm_bindgen::from_value(state_update.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
         let siblings: Option<Vec<Node<Fr>>> = match siblings {
-            Some(val) => val.into_serde().map_err(|err| js_err!(&err.to_string()))?,
+            Some(val) => serde_wasm_bindgen::from_value(val.unchecked_into()).map_err(|err| js_err!(&err.to_string()))?,
             None => None
         };
         
@@ -549,6 +568,41 @@ impl UserAccount {
         let data = self.inner.borrow().state.get_usable_notes();
 
         serde_wasm_bindgen::to_value(&data).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = "getTxInputs")]
+    /// Returns transaction inputs: account and notes
+    pub fn get_tx_inputs(&self, index: u64) -> Result<TxInput, JsValue> {
+        if index & constants::OUT as u64 != 0 {
+            return Err(js_err!(&format!("Account index should be multiple of {}", constants::OUT + 1)));
+        }
+
+        let inputs = self
+            .inner
+            .borrow()
+            .get_tx_input(index)
+            .ok_or_else(|| js_err!("No account found at index {}", index))?;
+            
+        let res = TxInputNodes {
+            account: IndexedAccount {
+                index: inputs.account.0,
+                account: inputs.account.1
+            },
+            intermediate_nullifier: inputs.intermediate_nullifier,
+            notes:  inputs
+                    .notes.into_iter()
+                    .map(|note| {
+                        IndexedNote {
+                            index: note.0,
+                            note: note.1,
+                        }
+                    })
+                    .collect()
+        };
+
+        Ok(serde_wasm_bindgen::to_value(&res)
+            .unwrap()
+            .unchecked_into::<TxInput>())
     }
 
     #[wasm_bindgen(js_name = "nextTreeIndex")]

@@ -1,4 +1,4 @@
-use std::{convert::TryInto, marker::PhantomData};
+use std::{convert::TryInto, marker::PhantomData, ops::Range};
 
 use kvdb::KeyValueDB;
 use kvdb_memorydb::InMemory as MemoryDatabase;
@@ -173,6 +173,40 @@ where
             _ => None,
         })
         .collect()
+    }
+
+    pub fn get_account(&self, index: u64) -> Option<Account<P::Fr>> {
+        match self.txs.get(index) {
+            Some(Transaction::Account(acc)) => Some(acc),
+            _ => None,
+        }
+    }
+
+    pub fn get_previous_account(&self, index: u64) -> Option<(u64, Account<P::Fr>)> {
+        if index == 0 { return None }
+
+        let prev_acc_indexes = self.txs
+            .iter_slice(0..=(index-1))
+            .filter_map(|(idx, tx)| match tx {
+                Transaction::Account(_) => Some(idx),
+                _ => None,
+            })
+            .max();
+
+        match prev_acc_indexes {
+            Some(idx) => Some((idx, self.get_account(idx).unwrap())),
+            _ => None,
+        }
+    }
+
+    pub fn get_notes_in_range(&self, range: Range<u64>) -> Vec<(u64, Note<P::Fr>)> {
+        self.txs
+            .iter_slice(range.start..=range.end.saturating_sub(1))
+            .filter_map(|(idx, tx)| match tx {
+                Transaction::Note(note) => Some((idx, note)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Return an index of a earliest usable note.

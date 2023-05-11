@@ -1,16 +1,45 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use libzkbob_rs::{libzeropool::{native::{account::Account, note::Note, cipher, key::{self, derive_key_p_d}}, fawkes_crypto::ff_uint::{Num, NumRepr, Uint}, constants}, delegated_deposit::{MEMO_DELEGATED_DEPOSIT_SIZE, MemoDelegatedDeposit}, utils::zero_account};
-use libzkbob_rs::{merkle::Hash, keys::Keys, delegated_deposit::DELEGATED_DEPOSIT_FLAG};
+use libzkbob_rs::libzeropool::{
+    native::{
+        account::Account as NativeAccount,
+        note::Note as NativeNote,
+        cipher::{
+            self,
+            symcipher_decryption_keys,
+            decrypt_account_no_validate,
+            decrypt_note_no_validate
+        },
+        key::{
+            self,derive_key_p_d
+        }
+    },
+    fawkes_crypto::ff_uint::{ Num, NumRepr, Uint },
+    constants,
+};
+use libzkbob_rs::{
+    merkle::Hash,
+    keys::Keys,
+    utils::zero_account,
+    delegated_deposit::{
+        DELEGATED_DEPOSIT_FLAG,
+        MEMO_DELEGATED_DEPOSIT_SIZE,
+        MemoDelegatedDeposit
+    }
+};
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
 use std::iter::IntoIterator;
 use thiserror::Error;
 use web_sys::console;
+use crate::{ Account, Note };
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs, ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter}; 
+use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs,
+            ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter,
+            TxMemoChunk,
+        };
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -36,15 +65,15 @@ pub struct StateUpdate {
     #[serde(rename = "newCommitments")]
     pub new_commitments: Vec<(u64, Hash<Fr>)>,
     #[serde(rename = "newAccounts")]
-    pub new_accounts: Vec<(u64, Account<Fr>)>,
+    pub new_accounts: Vec<(u64, NativeAccount<Fr>)>,
     #[serde(rename = "newNotes")]
-    pub new_notes: Vec<Vec<(u64, Note<Fr>)>>
+    pub new_notes: Vec<Vec<(u64, NativeNote<Fr>)>>
 }
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct DecMemo {
     pub index: u64,
-    pub acc: Option<Account<Fr>>,
+    pub acc: Option<NativeAccount<Fr>>,
     #[serde(rename = "inNotes")]
     pub in_notes: Vec<IndexedNote>,
     #[serde(rename = "outNotes")]
@@ -70,6 +99,14 @@ pub struct ParseColdStorageResult {
     pub decrypted_leafs_cnt: usize,
 }
 
+/// Describes one memo chunk (account\note) along with decryption key
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct MemoChunk {
+    pub index: u64,
+    pub encrypted: Vec<u8>,
+    pub key: Vec<u8>,
+}
+
 #[wasm_bindgen]
 pub struct TxParser {
     #[wasm_bindgen(skip)]
@@ -92,7 +129,7 @@ impl TxParser {
         let params = &self.params;
         let eta = Keys::derive(sk, params).eta;
 
-        let txs: Vec<IndexedTx> = txs.into_serde().map_err(|err| js_err!(&err.to_string()))?;
+        let txs: Vec<IndexedTx> = serde_wasm_bindgen::from_value(txs.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
 
         let (parse_results, parse_errors): (Vec<_>, Vec<_>) = vec_into_iter(txs)
             .map(|tx| -> Result<ParseResult, ParseError> {
@@ -137,6 +174,56 @@ impl TxParser {
             Err(js_err!("The following txs cannot be processed: {:?}", all_errs))
         }
     }
+
+    #[wasm_bindgen(js_name = "extractDecryptKeys")]
+    pub fn extract_decrypt_keys(
+        &self,
+        sk: &[u8],
+        index: u64,
+        memo: &[u8],
+    ) -> Result<Vec<TxMemoChunk>, JsValue> {
+        let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
+            .ok_or_else(|| js_err!("Invalid spending key"))?;
+        let eta = Keys::derive(sk, &self.params).eta;
+        //(index, chunk, key)
+        let result = symcipher_decryption_keys(eta, memo, &self.params).unwrap_or(vec![]);
+    
+        let chunks = result
+        .iter()
+        .map(|(chunk_idx, chunk, key)| {
+            let res = MemoChunk {
+                index: index + chunk_idx,
+                encrypted: chunk.clone(),
+                key: key.clone()
+            };
+
+            serde_wasm_bindgen::to_value(&res)
+                .unwrap()
+                .unchecked_into::<TxMemoChunk>()
+        })
+        .collect();
+        
+        Ok(chunks)
+
+    }
+
+    #[wasm_bindgen(js_name = "symcipherDecryptAcc")]
+    pub fn symcipher_decrypt_acc(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Account, JsValue> {
+        let acc = decrypt_account_no_validate(sym_key, encrypted, &self.params)
+                                .ok_or_else(|| js_err!("Unable to decrypt account"))?;
+        
+        Ok(serde_wasm_bindgen::to_value(&acc).unwrap().unchecked_into::<Account>())
+    }
+
+    #[wasm_bindgen(js_name = "symcipherDecryptNote")]
+    pub fn symcipher_decrypt_note(&self, sym_key: &[u8], encrypted: &[u8] ) -> Result<Note, JsValue> {
+        let note = decrypt_note_no_validate(sym_key, encrypted, &self.params)
+                                .ok_or_else(|| js_err!("Unable to decrypt note"))?;
+        
+        Ok(serde_wasm_bindgen::to_value(&note).unwrap().unchecked_into::<Note>())
+    }
+
+
 }
 
 pub fn parse_tx(
