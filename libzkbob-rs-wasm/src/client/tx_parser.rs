@@ -7,7 +7,7 @@ use libzkbob_rs::libzeropool::{
             self,
             symcipher_decryption_keys,
             decrypt_account_no_validate,
-            decrypt_note_no_validate
+            decrypt_note_no_validate, Version
         },
         key::{
             self,derive_key_p_d
@@ -21,7 +21,6 @@ use libzkbob_rs::{
     keys::Keys,
     utils::zero_account,
     delegated_deposit::{
-        DELEGATED_DEPOSIT_FLAG,
         MEMO_DELEGATED_DEPOSIT_SIZE,
         MemoDelegatedDeposit
     }
@@ -127,7 +126,9 @@ impl TxParser {
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
         let params = &self.params;
-        let eta = Keys::derive(sk, params).eta;
+        let keys = Keys::derive(sk, params);
+        let eta = keys.eta;
+        let kappa = &keys.kappa;
 
         let txs: Vec<IndexedTx> = serde_wasm_bindgen::from_value(txs.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
 
@@ -137,7 +138,7 @@ impl TxParser {
                 let memo = hex::decode(memo).unwrap();
                 let commitment = hex::decode(commitment).unwrap();
                 
-                parse_tx(index, &commitment, &memo, None, &eta, params)
+                parse_tx(index, &commitment, &memo, None, &eta, kappa, params)
             })
             .partition(Result::is_ok);
 
@@ -184,9 +185,11 @@ impl TxParser {
     ) -> Result<Vec<TxMemoChunk>, JsValue> {
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
-        let eta = Keys::derive(sk, &self.params).eta;
+        let keys = Keys::derive(sk, &self.params);
+        let eta = keys.eta;
+        let kappa = keys.kappa;
         //(index, chunk, key)
-        let result = symcipher_decryption_keys(eta, memo, &self.params).unwrap_or(vec![]);
+        let result = symcipher_decryption_keys(eta, &kappa, memo, &self.params).unwrap_or(vec![]);
     
         let chunks = result
         .iter()
@@ -232,6 +235,7 @@ pub fn parse_tx(
     memo: &Vec<u8>,
     tx_hash: Option<&Vec<u8>>,
     eta: &Num<Fr>,
+    kappa: &[u8; 32],
     params: &PoolParams
 ) -> Result<ParseResult, ParseError> {
     if memo.len() < 4 {
@@ -318,7 +322,7 @@ pub fn parse_tx(
             .take(num_hashes as usize)
             .map(|bytes| Num::from_uint_reduced(NumRepr(Uint::from_little_endian(bytes))));
     
-        let pair = cipher::decrypt_out(*eta, &memo, params);
+        let pair = cipher::decrypt_out(*eta, kappa, &memo, params);
 
         match pair {
             Some((account, notes)) => {        
@@ -403,10 +407,10 @@ pub fn parse_tx(
 }
 
 fn parse_prefix(memo: &[u8]) -> (bool, u32) {
-    let prefix = (&memo[0..4]).read_u32::<LittleEndian>().unwrap();
-    let is_delegated_deposit = prefix & DELEGATED_DEPOSIT_FLAG > 0;
-    match is_delegated_deposit {
-        true => (true, (prefix ^ DELEGATED_DEPOSIT_FLAG)),
-        false => (false, prefix)
+    let num_items = (&memo[0..2]).read_u16::<LittleEndian>().unwrap();
+    let version = Version::from_u16((&memo[2..4]).read_u16::<LittleEndian>().unwrap()).unwrap();
+    match version {
+        Version::DelegatedDeposit => (true, num_items as u32),
+        _ => (false, num_items as u32) 
     }
 }
