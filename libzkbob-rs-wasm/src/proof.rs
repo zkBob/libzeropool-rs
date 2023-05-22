@@ -1,3 +1,4 @@
+use fawkes_crypto::backend::bellman_groth16::prover::prove_precomputed;
 use libzkbob_rs::libzeropool::{
     circuit::tree::tree_update,
     circuit::tx::c_transfer,
@@ -45,6 +46,7 @@ impl Proof {
         transfer_pub: ts_types::TransferPub,
         transfer_sec: ts_types::TransferSec,
     ) -> Result<crate::ts_types::Proof, JsValue> {
+        let precomputed = &params.precomputed;
         let params = &params.inner;
 
         let public: NativeTransferPub<_> =
@@ -56,7 +58,10 @@ impl Proof {
             c_transfer(&public, &secret, &*POOL_PARAMS);
         };
 
-        let (inputs, snark_proof) = prove(params, &public, &secret, circuit);
+        let (inputs, snark_proof) = match precomputed {
+            Some(precomputed) => prove_precomputed(params, &public, &secret, circuit, precomputed),
+            None => prove(params, &public, &secret, circuit)
+        };
 
         let proof = Proof {
             inputs,
