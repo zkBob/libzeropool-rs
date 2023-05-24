@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fawkes_crypto::backend::bellman_groth16::PrecomputedData;
-use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::{Parameters, PrecomputedData};
 use neon::{prelude::*, types::buffer::TypedArray};
 
 use crate::{Engine, Fr};

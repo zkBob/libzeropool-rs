@@ -11,9 +11,3 @@ default-members = [
     "libzkbob-rs-node",
     "libs/kvdb-web",
 ]
-
-[patch.crates-io]
-fawkes-crypto-zkbob = { git = "https://github.com/zkbob//fawkes-crypto", branch = "feature/preparse_gates" }
-
-[patch."https://github.com/zkbob/fawkes-crypto"]
-fawkes-crypto-zkbob = { git = "https://github.com/zkbob//fawkes-crypto", branch = "feature/preparse_gates" }
