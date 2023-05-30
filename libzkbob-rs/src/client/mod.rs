@@ -125,7 +125,7 @@ pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
-    pub sign_callback: Option<Box<dyn Fn(&[u8]) -> Vec<u8>>>, // TODO: Find a way to make it async
+    //pub sign_callback: Option<Box<dyn Fn(&[u8]) -> Vec<u8>>>, // TODO: Find a way to make it async
 }
 
 impl<D, P> UserAccount<D, P>
@@ -143,7 +143,7 @@ where
             keys,
             state,
             params,
-            sign_callback: None,
+            //sign_callback: None,
         }
     }
 
