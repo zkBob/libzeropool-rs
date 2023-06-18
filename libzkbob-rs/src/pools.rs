@@ -20,6 +20,8 @@ pub enum Pool {
     SepoliaBOB,
     GoerliBOB,
     GoerliOptimismBOB,
+    GoerliETH,
+    GoerliUSDC,
 }
 
 impl Pool {
@@ -33,6 +35,8 @@ impl Pool {
             //0x000000 => Some(Pool::SepoliaBOB),
             0xffff02 => Some(Pool::GoerliBOB),
             0xffff03 => Some(Pool::GoerliOptimismBOB),
+            0xffff04 => Some(Pool::GoerliETH),
+            0xffff05 => Some(Pool::GoerliUSDC),
             _ => None,
         }
     }
@@ -45,6 +49,8 @@ impl Pool {
             "zkbob_sepolia" => Some(Pool::SepoliaBOB),
             "zkbob_goerli" => Some(Pool::GoerliBOB),
             "zkbob_goerli_optimism" => Some(Pool::GoerliOptimismBOB),
+            "zkbob_goerli_eth" => Some(Pool::GoerliETH),
+            "zkbob_goerli_usdc" => Some(Pool::GoerliUSDC),
             _ => None,
         }
     }
@@ -58,6 +64,8 @@ impl Pool {
             Pool::SepoliaBOB => 0x000000, 
             Pool::GoerliBOB => 0xffff02,
             Pool::GoerliOptimismBOB => 0xffff03,
+            Pool::GoerliETH => 0xffff04,
+            Pool::GoerliUSDC => 0xffff05,
         }
     }
 
@@ -87,6 +95,8 @@ impl Pool {
             Pool::SepoliaBOB => "zkbob_sepolia",
             Pool::GoerliBOB => "zkbob_goerli",
             Pool::GoerliOptimismBOB => "zkbob_goerli_optimism",
+            Pool::GoerliETH => "zkbob_goerli_eth",
+            Pool::GoerliUSDC => "zkbob_goerli_usdc",
         }
     }
 
@@ -98,6 +108,8 @@ impl Pool {
             Pool::SepoliaBOB => "BOB on Sepolia testnet",
             Pool::GoerliBOB => "BOB on Goerli testnet",
             Pool::GoerliOptimismBOB => "BOB on Goerli Optimism testnet",
+            Pool::GoerliETH => "WETH on Goerli testnet",
+            Pool::GoerliUSDC => "USDC on Goerli testnet",
         }
     }
 }
