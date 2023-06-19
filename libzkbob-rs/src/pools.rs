@@ -17,6 +17,7 @@ pub enum Pool {
     PolygonBOB,
     OptimismBOB,
     OptimismETH,
+    PolygonUSDC,
     SepoliaBOB,
     GoerliBOB,
     GoerliOptimismBOB,
@@ -30,6 +31,7 @@ impl Pool {
             0x000000 => Some(Pool::PolygonBOB),
             0x000001 => Some(Pool::OptimismBOB),
             0x000002 => Some(Pool::OptimismETH),
+            0x000003 => Some(Pool::PolygonUSDC),
             // pool_id duplication, use this method with caution
             // (it will never produce Pool::SepoliaBOB object)
             //0x000000 => Some(Pool::SepoliaBOB),
@@ -46,6 +48,7 @@ impl Pool {
             "zkbob_polygon" => Some(Pool::PolygonBOB),
             "zkbob_optimism" => Some(Pool::OptimismBOB),
             "zkbob_optimism_eth" => Some(Pool::OptimismETH),
+            "zkbob_polygon_usdc" => Some(Pool::PolygonUSDC),
             "zkbob_sepolia" => Some(Pool::SepoliaBOB),
             "zkbob_goerli" => Some(Pool::GoerliBOB),
             "zkbob_goerli_optimism" => Some(Pool::GoerliOptimismBOB),
@@ -60,6 +63,7 @@ impl Pool {
             Pool::PolygonBOB => 0x000000,
             Pool::OptimismBOB => 0x000001,
             Pool::OptimismETH => 0x000002,
+            Pool::PolygonUSDC => 0x000003,
             // here is an issue with Sepolia pool deployment
             Pool::SepoliaBOB => 0x000000, 
             Pool::GoerliBOB => 0xffff02,
@@ -92,6 +96,7 @@ impl Pool {
             Pool::PolygonBOB => "zkbob_polygon",
             Pool::OptimismBOB => "zkbob_optimism",
             Pool::OptimismETH => "zkbob_optimism_eth",
+            Pool::PolygonUSDC => "zkbob_polygon_usdc",
             Pool::SepoliaBOB => "zkbob_sepolia",
             Pool::GoerliBOB => "zkbob_goerli",
             Pool::GoerliOptimismBOB => "zkbob_goerli_optimism",
@@ -104,7 +109,8 @@ impl Pool {
         match self {
             Pool::PolygonBOB => "BOB on Polygon",
             Pool::OptimismBOB => "BOB on Optimism",
-            Pool::OptimismETH => "ETH on Optimism",
+            Pool::OptimismETH => "WETH on Optimism",
+            Pool::PolygonUSDC => "USDC on Polygon",
             Pool::SepoliaBOB => "BOB on Sepolia testnet",
             Pool::GoerliBOB => "BOB on Goerli testnet",
             Pool::GoerliOptimismBOB => "BOB on Goerli Optimism testnet",
