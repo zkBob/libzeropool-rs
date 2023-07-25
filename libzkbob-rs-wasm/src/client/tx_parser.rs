@@ -1,4 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
+use fawkes_crypto::core::sizedvec::SizedVec;
 use libzkbob_rs::libzeropool::{
     native::{
         account::Account as NativeAccount,
@@ -11,7 +12,7 @@ use libzkbob_rs::libzeropool::{
         },
         key::{
             self,derive_key_p_d
-        }
+        }, tx::out_commitment_hash
     },
     fawkes_crypto::ff_uint::{ Num, NumRepr, Uint },
     constants,
@@ -223,8 +224,45 @@ impl TxParser {
         Ok(serde_wasm_bindgen::to_value(&note).unwrap().unchecked_into::<Note>())
     }
 
+    #[wasm_bindgen(js_name = "check_out_commitment")]
+    pub fn check_out_commitment(commitment: &str, memo: &str, account: Account) -> Result<bool, JsValue>{
+
+        let account: NativeAccount<Fr> = serde_wasm_bindgen::from_value(account.into())?;
+
+        let memo = hex::decode(memo)
+        .map_err(|_|wasm_bindgen::JsError::new("failed to decode memo from hex"))?;
+
+        let commitment = hex::decode(commitment)
+        .map_err(|_|wasm_bindgen::JsError::new("failed to decode commitment from hex"))?;
+
+        let (_is_delegated_deposit, num_items) = parse_prefix(&memo);
+    
+        //TODO: what if delegated deposit?
+        let out_note_hashes = (&memo[4..])
+            .chunks(32)
+            .take(num_items as usize)
+            .map(|out_note_hash_bytes| Num::from_uint_reduced(NumRepr(Uint::from_big_endian(out_note_hash_bytes))));
+            
+    
+        let out_account_hash = account.hash(&*POOL_PARAMS);
+    
+        let out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }> = [out_account_hash]
+                .iter()
+                .copied()
+                .chain(out_note_hashes)
+                .collect();
+    
+        let out_commit = out_commitment_hash(out_hashes.as_slice(), &*POOL_PARAMS);
+    
+        let control_value:Num<Fr> = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)));
+    
+        return Ok(out_commit.eq(&control_value));
+    }
+
 
 }
+
+
 
 pub fn parse_tx(
     index: u64,
@@ -409,4 +447,9 @@ fn parse_prefix(memo: &[u8]) -> (bool, u32) {
         true => (true, (prefix ^ DELEGATED_DEPOSIT_FLAG)),
         false => (false, prefix)
     }
+}
+
+#[test]
+fn test_commitment_check(){
+    
 }
