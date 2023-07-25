@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use fawkes_crypto::core::sizedvec::SizedVec;
+use fawkes_crypto::{core::sizedvec::SizedVec, engines::bn256::Fr};
 use libzkbob_rs::libzeropool::{
     native::{
         account::Account as NativeAccount,
@@ -12,7 +12,7 @@ use libzkbob_rs::libzeropool::{
         },
         key::{
             self,derive_key_p_d
-        }, tx::out_commitment_hash
+        }, tx::out_commitment_hash, boundednum::BoundedNum
     },
     fawkes_crypto::ff_uint::{ Num, NumRepr, Uint },
     constants,
@@ -37,7 +37,7 @@ use crate::{ Account, Note };
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
-use crate::{PoolParams, Fr, IndexedNote, IndexedTx, Fs,
+use crate::{PoolParams, IndexedNote, IndexedTx, Fs,
             ParseTxsResult, POOL_PARAMS, helpers::vec_into_iter,
             TxMemoChunk,
         };
@@ -231,35 +231,36 @@ impl TxParser {
 
         let memo = hex::decode(memo)
         .map_err(|_|wasm_bindgen::JsError::new("failed to decode memo from hex"))?;
-
+    
         let commitment = hex::decode(commitment)
         .map_err(|_|wasm_bindgen::JsError::new("failed to decode commitment from hex"))?;
-
-        let (_is_delegated_deposit, num_items) = parse_prefix(&memo);
     
-        //TODO: what if delegated deposit?
-        let out_note_hashes = (&memo[4..])
-            .chunks(32)
-            .take(num_items as usize)
-            .map(|out_note_hash_bytes| Num::from_uint_reduced(NumRepr(Uint::from_big_endian(out_note_hash_bytes))));
-            
-    
-        let out_account_hash = account.hash(&*POOL_PARAMS);
-    
-        let out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }> = [out_account_hash]
-                .iter()
-                .copied()
-                .chain(out_note_hashes)
-                .collect();
-    
-        let out_commit = out_commitment_hash(out_hashes.as_slice(), &*POOL_PARAMS);
-    
-        let control_value:Num<Fr> = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)));
-    
-        return Ok(out_commit.eq(&control_value));
+        Ok(check_commitment(account,commitment,memo))
+        
     }
 
+}
 
+pub fn check_commitment(account:NativeAccount<Fr>,commitment: Vec<u8>,memo: Vec<u8>)-> bool{
+    let (_is_delegated_deposit, num_items) = parse_prefix(&memo);
+    let out_note_hashes = (&memo[4..])
+        .chunks(32)
+        .take(num_items as usize)
+        .map(|out_note_hash_bytes| Num::from_uint_reduced(NumRepr(Uint::from_big_endian(out_note_hash_bytes))));
+        
+
+    let out_account_hash = account.hash(&*POOL_PARAMS);
+
+    let out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }> = [out_account_hash]
+            .iter()
+            .copied()
+            .chain(out_note_hashes)
+            .collect();
+
+    let out_commit = out_commitment_hash(out_hashes.as_slice(), &*POOL_PARAMS);
+
+    let control_value:Num<Fr> = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)));
+    out_commit.eq(&control_value)
 }
 
 
@@ -451,5 +452,24 @@ fn parse_prefix(memo: &[u8]) -> (bool, u32) {
 
 #[test]
 fn test_commitment_check(){
+    // let d: Num<Fr> = Num::<Fr>::from_uint(NumRepr(Uint::from_u64(43637228811804150679463 as u64))).unwrap();
+    let d_uint = Uint::from_big_endian(&hex::decode("93D9433B4638B8547A7").unwrap());
+    let d: Num<Fr> = Num::<Fr>::from_uint(NumRepr(d_uint)).unwrap();
     
+    let p_d = Num::<Fr>::from_uint(NumRepr(Uint::from_big_endian( &hex::decode("127AAAA6D46AA9A9F316503DF79E52B6B59EA158AF23D6C5A96D462258C7481E").unwrap() ))).unwrap();
+    let i:BoundedNum<Fr, { constants::HEIGHT }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(71043 as u64))).unwrap());
+    let b: BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(189004460000 as u64))).unwrap());
+    let e: BoundedNum<Fr, { constants::ENERGY_SIZE_BITS }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(494989639 as u64))).unwrap());
+    let account  = NativeAccount{d:BoundedNum::<Fr,80>::new(d),p_d,i,b,e};
+
+    let commitment = hex::decode("2DBD92AFC494789E664A766DF0ADBD553BC0578C23966146C9E50FDE83FE41E1").unwrap();
+
+    let memo = "0000000005f5e10002000000a745fdc2bd71a2d9b1e8cc4b7c54ba2b4b28031c4cc16329253483e5b9acb229f98830e2eb5ccdf67bd414d8deeac0956ba796b66764a7972125bd6d2acaf501ad45b95ffdfcb464d9cd7ce84e7506a5d066cfd77cdf1e44b7209deea8a9721ba7408a996d46d595f3f6dd17b5700f6f675f782637b721b5265a23aa59a8d3463d37f636a8427ff9f6753603a21e2ffad4f342bb5fed5698f955411d5a73033e9a9efb66fea6c85aeb6fad7855611f847973108a0f15fc786c7a1d5aa0e54d9d9bbeb3d71c4e5b5dda1191b7cb0b1f4b7d25e8b39f9b0125de706756f9a7197e26eab7bd4e61e3fc8e3cf7bbb36471255ae11660c8b62b0509be1f040794c975c8eb53b4b878d3f9c0bb94a8b750a659f2f46bebd0ca8d35f1facffd69e35f274bb821886b04cd96c16107b277f034aba0b68524ae664cb0a2e258a7fbcd88b84ee2806d7651aad69c86ddca5b2f3287d4cf46aa09b0017986fcc765498911ed48cc9b05ab8cd9490b3668f0b94aba0efa4d";
+    let memo = hex::decode(memo).unwrap();
+    check_commitment(account, commitment, memo);
+    // NativeAccount
+// let a:Num<Fr> = Num::from (NumRepr(Uint::from_i64(43637228811804150679463)));
+    // let account:NativeAccount<Fr> = NativeAccount{d: BoundedNum<Fr,80>::from(Numrepr(Uint::from_u64(43637228811804150679463))),
+    // p_d:"8358364411001943365602355457890490687636973061216977207618248472133619894302",i:"71043",b:"189004460000",e:"494989639
+    // 78000"} ;
 }
