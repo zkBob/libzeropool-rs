@@ -29,7 +29,7 @@ use libzkbob_rs::{
 };
 use wasm_bindgen::{prelude::*, JsCast};
 use serde::{Serialize, Deserialize};
-use std::iter::IntoIterator;
+use std::{iter::IntoIterator, str::FromStr};
 use thiserror::Error;
 use web_sys::console;
 use crate::{ Account, Note };
@@ -232,8 +232,7 @@ impl TxParser {
         let memo = hex::decode(memo)
         .map_err(|_|wasm_bindgen::JsError::new("failed to decode memo from hex"))?;
     
-        let commitment = hex::decode(commitment)
-        .map_err(|_|wasm_bindgen::JsError::new("failed to decode commitment from hex"))?;
+        let commitment = Num::from_str(commitment)?;
     
         Ok(check_commitment(account,commitment,memo))
         
@@ -241,7 +240,7 @@ impl TxParser {
 
 }
 
-pub fn check_commitment(account:NativeAccount<Fr>,commitment: Vec<u8>,memo: Vec<u8>)-> bool{
+pub fn check_commitment(account:NativeAccount<Fr>,commitment: Num<Fr>,memo: Vec<u8>)-> bool{
     let (_is_delegated_deposit, num_items) = parse_prefix(&memo);
 
     let out_acc_hash_hex = &memo[4..36];
@@ -266,9 +265,8 @@ pub fn check_commitment(account:NativeAccount<Fr>,commitment: Vec<u8>,memo: Vec<
             .collect();
 
     let out_commit = out_commitment_hash(out_hashes.as_slice(), &*POOL_PARAMS);
-
-    let control_value:Num<Fr> = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)));
-    out_commit.eq(&control_value)
+    
+    out_commit.eq(&commitment)
     
 }
 
@@ -474,15 +472,15 @@ fn test_commitment_check(){
     //      out acc hash: a745fdc2bd71a2d9b1e8cc4b7c54ba2b4b28031c4cc16329253483e5b9acb229f98830e2
     //      out note hash:eb5ccdf67bd414d8deeac0956ba796b66764a7972125bd6d2acaf501ad45b95ffdfcb464 
 
-    let d_uint = Uint::from_little_endian(&hex::decode("093D9433B4638B8547A7").unwrap());
-    let d: Num<Fr> = Num::<Fr>::from_uint(NumRepr(d_uint)).unwrap();
     
+    let d: Num<Fr> = Num::from_str("43637228811804150679463").unwrap();
     let p_d = Num::<Fr>::from_uint(NumRepr(Uint::from_little_endian( &hex::decode("127AAAA6D46AA9A9F316503DF79E52B6B59EA158AF23D6C5A96D462258C7481E").unwrap() ))).unwrap();
     let i:BoundedNum<Fr, { constants::HEIGHT }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(71043 as u64))).unwrap());
-    let b: BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(189004460000 as u64))).unwrap());
-    let e: BoundedNum<Fr, { constants::ENERGY_SIZE_BITS }> = BoundedNum::new(Num::<Fr>::from_uint(NumRepr(Uint::from_u64(494989639 as u64))).unwrap());
+    let b: BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }> = BoundedNum::new(Num::from_str("189004460000").unwrap());
+    let e: BoundedNum<Fr, { constants::ENERGY_SIZE_BITS }> = BoundedNum::new(Num::from_str("494989639").unwrap());
     let account  = NativeAccount{d:BoundedNum::<Fr,{constants::DIVERSIFIER_SIZE_BITS}>::new(d),p_d,i,b,e};
-    let commitment = hex::decode("2DBD92AFC494789E664A766DF0ADBD553BC0578C23966146C9E50FDE83FE41E1").unwrap();
+    let commitment = "20689024675149686951279403287851465204172304813867744345869859151717603361249";
+    let commitment = Num::from_str(commitment).unwrap();
     let memo = "02000000a745fdc2bd71a2d9b1e8cc4b7c54ba2b4b28031c4cc16329253483e5b9acb229f98830e2eb5ccdf67bd414d8deeac0956ba796b66764a7972125bd6d2acaf501ad45b95ffdfcb464d9cd7ce84e7506a5d066cfd77cdf1e44b7209deea8a9721ba7408a996d46d595f3f6dd17b5700f6f675f782637b721b5265a23aa59a8d3463d37f636a8427ff9f6753603a21e2ffad4f342bb5fed5698f955411d5a73033e9a9efb66fea6c85aeb6fad7855611f847973108a0f15fc786c7a1d5aa0e54d9d9bbeb3d71c4e5b5dda1191b7cb0b1f4b7d25e8b39f9b0125de706756f9a7197e26eab7bd4e61e3fc8e3cf7bbb36471255ae11660c8b62b0509be1f040794c975c8eb53b4b878d3f9c0bb94a8b750a659f2f46bebd0ca8d35f1facffd69e35f274bb821886b04cd96c16107b277f034aba0b68524ae664cb0a2e258a7fbcd88b84ee2806d7651aad69c86ddca5b2f3287d4cf46aa09b0017986fcc765498911ed48cc9b05ab8cd9490b3668f0b94aba0efa4d";
     let memo = hex::decode(memo).unwrap();
     assert!(check_commitment(account, commitment, memo),"not equal");
