@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use libzeropool::{native::params::PoolParams, fawkes_crypto::{ff_uint::{Num, PrimeField}, rand::Rng, native::{ecc::{JubJubParams, EdwardsPoint}, poseidon::{PoseidonParams, poseidon}}}};
 
-use crate::{random::CustomRng, merkle::Hash};
-
-
+use crate::random::CustomRng;
 
 #[derive(Debug)]
 pub struct ShareProof<P: PoolParams> {
@@ -334,7 +332,7 @@ mod tests {
         let snark_params = Parameters::<Bn256>::read(&mut data.as_slice(), true, true)
             .expect("failed to parse file with snark params");
 
-        let mut participants = prepare_participants(3, 2);
+        let mut participants = prepare_participants(5, 3);
         let pk = participants[0].pk.clone().unwrap();
         
         let mut accounts = vec![];
@@ -347,7 +345,7 @@ mod tests {
             accounts.push(acc);
         }
 
-        let mut tx = accounts[0].create_tx(
+        let mut tx = accounts[1].create_tx(
             TxType::Deposit(
                 BoundedNum::new(Num::ZERO),
                 vec![],
@@ -358,7 +356,7 @@ mod tests {
         )
         .unwrap();
 
-        let signers_set = [0, 2];
+        let signers_set = [0, 2, 4];
         let mut b = vec![];
         for i in signers_set {
             b.push(participants[i].sign_round_1(&*POOL_PARAMS));
@@ -385,7 +383,7 @@ mod tests {
 
     fn prepare_participants(n: u32, t: u32) -> Vec<FrostParticipant<PoolBN256>> {
         let params = &*POOL_PARAMS;
-        let mut participants: Vec<_> = (1..4).map(|i| FrostParticipant::<PoolBN256>::new(i, t, n)).collect();
+        let mut participants: Vec<_> = (1..n+1).map(|i| FrostParticipant::<PoolBN256>::new(i, t, n)).collect();
 
         // round 1
         for i in 0..n {
