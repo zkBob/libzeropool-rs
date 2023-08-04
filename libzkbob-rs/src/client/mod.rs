@@ -78,6 +78,7 @@ pub struct TransactionData<Fr: PrimeField> {
     pub memo: Vec<u8>,
     pub commitment_root: Num<Fr>,
     pub out_hashes: SizedVec<Num<Fr>, { constants::OUT + 1 }>,
+    pub tx_hash: Num<Fr>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -612,6 +613,7 @@ where
             memo: memo_data,
             commitment_root: out_commit,
             out_hashes,
+            tx_hash,
         })
     }
 

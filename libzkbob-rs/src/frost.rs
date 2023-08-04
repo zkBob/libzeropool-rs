@@ -261,9 +261,9 @@ impl<P: PoolParams> FrostParticipant<P> {
 
 #[cfg(test)]
 mod tests {
-    use libzeropool::{native::params::{PoolBN256, PoolParams}, POOL_PARAMS, fawkes_crypto::{rand::Rng, ff_uint::Num, native::eddsaposeidon::eddsaposeidon_verify}};
+    use libzeropool::{native::{params::{PoolBN256, PoolParams}, boundednum::BoundedNum, key::derive_key_eta}, POOL_PARAMS, fawkes_crypto::{rand::Rng, ff_uint::Num, native::eddsaposeidon::eddsaposeidon_verify, backend::bellman_groth16::{Parameters, engines::Bn256, verifier::verify}}};
 
-    use crate::random::CustomRng;
+    use crate::{random::CustomRng, client::{state::State, UserAccount, TxType}, pools::Pool, proof::prove_tx};
 
     use super::FrostParticipant;
 
@@ -326,5 +326,90 @@ mod tests {
 
         println!("{}", eddsaposeidon_verify(s, r, pk, m, params.eddsa(), params.jubjub()));
         assert!(eddsaposeidon_verify(s, r, pk, m, params.eddsa(), params.jubjub()))
+    }
+
+    #[test]
+    fn test_multisig_deposit() {
+        let data = std::fs::read("../../transfer_params.bin").expect("failed to read file with snark params");
+        let snark_params = Parameters::<Bn256>::read(&mut data.as_slice(), true, true)
+            .expect("failed to parse file with snark params");
+
+        let mut participants = prepare_participants(3, 2);
+        let pk = participants[0].pk.clone().unwrap();
+        
+        let mut accounts = vec![];
+        for p in &participants {
+            let state = State::init_test(POOL_PARAMS.clone());
+            let mut acc = UserAccount::new(Num::ZERO, Pool::PolygonBOB, state, POOL_PARAMS.clone());
+            acc.keys.a = pk;
+            acc.keys.eta = derive_key_eta(pk, &*POOL_PARAMS);
+            acc.keys.sk = p.sk.clone().unwrap();
+            accounts.push(acc);
+        }
+
+        let mut tx = accounts[0].create_tx(
+            TxType::Deposit(
+                BoundedNum::new(Num::ZERO),
+                vec![],
+                BoundedNum::new(Num::ONE),
+            ),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let signers_set = [0, 2];
+        let mut b = vec![];
+        for i in signers_set {
+            b.push(participants[i].sign_round_1(&*POOL_PARAMS));
+        }
+
+        let mut partial_signatures = vec![];
+        for i in signers_set {
+            partial_signatures.push(participants[i].sign_round_2(tx.tx_hash, &b, &*POOL_PARAMS));
+        }
+
+        let r = partial_signatures[0].0;
+        let mut s = Num::ZERO;
+        for ps in partial_signatures {
+            s += ps.1;
+        }
+
+        tx.secret.eddsa_r = r;
+        tx.secret.eddsa_s = s.to_other_reduced();
+
+        let proof = prove_tx(&snark_params, &*POOL_PARAMS, tx.public, tx.secret, &None);
+        println!("{}", verify(&snark_params.get_vk(), &proof.1, &proof.0));
+        assert!(verify(&snark_params.get_vk(), &proof.1, &proof.0));
+    }
+
+    fn prepare_participants(n: u32, t: u32) -> Vec<FrostParticipant<PoolBN256>> {
+        let params = &*POOL_PARAMS;
+        let mut participants: Vec<_> = (1..4).map(|i| FrostParticipant::<PoolBN256>::new(i, t, n)).collect();
+
+        // round 1
+        for i in 0..n {
+            let message = participants[i as usize].keygen_round_1(params);
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+                participants[j as usize].keygen_round_1_receive(&message, params);
+            }
+        }
+
+        // round 2
+        for i in 0..n {
+            for j in 0..n {
+                let message = participants[i as usize].keygen_round_2(j + 1);
+                participants[j as usize].keygen_round_2_receive(&message, params);
+            }
+        }
+
+        for i in 0..n {
+            participants[i as usize].keygen_round_2_complete(params);
+        }
+
+        participants
     }
 }
