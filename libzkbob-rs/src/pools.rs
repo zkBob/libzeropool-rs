@@ -112,7 +112,7 @@ impl Pool {
 
     pub fn human_readable(&self) -> &str {
         match self {
-            Pool::PolygonUSDC => "BOB on Polygon",
+            Pool::PolygonUSDC => "USDC on Polygon",
             Pool::OptimismUSDC => "USDC on Optimism",
             Pool::OptimismETH => "WETH on Optimism",
             Pool::TronUSDT => "USDT on Tron",
