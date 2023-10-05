@@ -3,7 +3,6 @@ use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 use std::str::FromStr;
 
-use libzkbob_rs::libzeropool::native::tx::nullifier_outer_hash;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -775,11 +774,5 @@ impl UserAccount {
     #[wasm_bindgen(js_name = "treeSetStableIndex")]
     pub fn tree_set_stable_index(&self, stable_index: u64) {
         self.inner.borrow_mut().state.tree.set_last_stable_index(Some(stable_index));
-    }
-    #[wasm_bindgen(js_name = "nullifier_outer_hash")]
-    pub fn nullifier_outer_hash(&self,account_hash: JsHash, intermediate_nullifier_hash: JsHash)-> Result<String, JsValue>{
-        let acc_hash: Hash<Fr> = serde_wasm_bindgen::from_value(account_hash.unchecked_into())?;
-        let inh: Hash<Fr> = serde_wasm_bindgen::from_value(intermediate_nullifier_hash.unchecked_into())?;
-        Ok(nullifier_outer_hash(acc_hash, inh, &self.inner.borrow().params).to_uint().to_string())
     }
 }

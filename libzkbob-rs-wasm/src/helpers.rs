@@ -1,11 +1,15 @@
 use std::str::FromStr;
 
+use libzkbob_rs::libzeropool::native::tx::nullifier_outer_hash;
 use wasm_bindgen::prelude::*;
 use libzkbob_rs::libzeropool::{fawkes_crypto::ff_uint::Num, native::tx::out_commitment_hash};
 use libzkbob_rs::{
+  merkle::Hash,
   libzeropool::fawkes_crypto::borsh::{BorshSerialize, BorshDeserialize},
-  libzeropool::POOL_PARAMS
+  libzeropool::POOL_PARAMS,
+  libzeropool::native::account::Account as NativeAccount
 };
+use crate::ts_types::Hash as JsHash;
 use crate::Fr;
 use crate::ts_types::RawHashes;
 
@@ -45,6 +49,14 @@ impl Helpers {
       let commitment = out_commitment_hash(&hashes, &*POOL_PARAMS);
 
       commitment.to_string()
+    }
+
+    #[wasm_bindgen(js_name = "nullifierOuterHash")]
+    pub fn nullifier_outer_hash(account: crate::Account, intermediate_nullifier_hash: JsHash)-> Result<String, JsValue>{
+        let in_account: NativeAccount<Fr> = serde_wasm_bindgen::from_value(account.into())?;
+        let in_account_hash = in_account.hash(&*POOL_PARAMS);
+        let intermediate_hash_native: Hash<Fr> = serde_wasm_bindgen::from_value(intermediate_nullifier_hash.unchecked_into())?;
+        Ok(nullifier_outer_hash(in_account_hash, intermediate_hash_native,&*POOL_PARAMS).to_uint().to_string())
     }
 }
 
