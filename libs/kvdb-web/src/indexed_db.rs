@@ -10,6 +10,7 @@
 
 use js_sys::{Array, ArrayBuffer, Uint8Array};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use web_sys::console;
 use web_sys::{Event, IdbCursorWithValue, IdbDatabase, IdbKeyRange, IdbOpenDbRequest, IdbRequest, IdbTransactionMode};
 
 use futures::channel;
@@ -183,11 +184,13 @@ pub fn idb_commit_transaction(idb: &IdbDatabase, txn: &DBTransaction, columns: u
 	on_complete.forget();
 
 	let on_error = Closure::once(move || {
-		warn!("Failed to commit a transaction to IndexedDB");
+		console::error_1(&"Failed to commit a transaction to IndexedDB".into());
 	});
 	idb_txn.set_onerror(Some(on_error.as_ref().unchecked_ref()));
 	on_error.forget();
 
+	// Commit transaction explicitly to prevent timeout errors due to auto-commit delaying
+	idb_txn.commit().expect("IDBTransaction.commit failed");
 	rx.map(|_| ())
 }
 

@@ -109,8 +109,8 @@ export interface VK {
 }
 
 declare class Params {
-    static fromBinary(data: Buffer): Params;
-    static fromFile(path: string): Params;
+    static fromBinary(data: Buffer, precompute: boolean): Params;
+    static fromFile(path: string, precompute: boolean): Params;
 }
 
 declare class Proof {
