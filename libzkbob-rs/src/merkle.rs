@@ -17,6 +17,7 @@ use libzeropool::{
     native::params::PoolParams,
 };
 use serde::{Deserialize, Serialize};
+use std::cmp::{min,max};
 
 pub type Hash<F> = Num<F>;
 
@@ -622,16 +623,16 @@ impl<D: KeyValueDB, P: PoolParams> MerkleTree<D, P> {
             .into_iter()
             .map(|(index, hash)| {
                 assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-                first_bound_index = Some(first_bound_index.unwrap_or(u64::MAX).min(index));
-                last_bound_index = Some(last_bound_index.unwrap_or(0).max(index));
+                first_bound_index = Some(first_bound_index.map_or(index, |v| min(v,index)));
+                last_bound_index = Some(last_bound_index.map_or(index, |v| max(v,index)));
                 ((constants::OUTPLUSONELOG as u32, index  >> constants::OUTPLUSONELOG), hash)
             })
             .collect();
         
         new_hashes.into_iter().for_each(|(index, leafs)| {
             assert_eq!(index & ((1 << constants::OUTPLUSONELOG) - 1), 0);
-            first_bound_index = Some(first_bound_index.unwrap_or(u64::MAX).min(index));
-            last_bound_index = Some(last_bound_index.unwrap_or(0).max(index + leafs.len() as u64 - 1));
+            first_bound_index = Some(first_bound_index.map_or(index, |v| min(v,index)));
+            last_bound_index = Some(last_bound_index.map_or(index, |v| max(v,index + leafs.len() as u64 - 1)));
             (0..constants::OUTPLUSONELOG)
                 .for_each(|height| {
                     let level_index = ((index + leafs.len() as u64 - 1) >> height) + 1;
