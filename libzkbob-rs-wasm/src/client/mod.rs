@@ -775,4 +775,30 @@ impl UserAccount {
     pub fn tree_set_stable_index(&self, stable_index: u64) {
         self.inner.borrow_mut().state.tree.set_last_stable_index(Some(stable_index));
     }
+
+    #[wasm_bindgen(js_name = "accountNullifier")]
+    pub fn get_last_account_nullifier(&self)  -> Result<JsHash, JsValue> {
+        let inner = self.inner.borrow();
+        let latest_acc = match inner.state.latest_account_index {
+            Some(acc_idx) => (acc_idx, inner.state.get_account(acc_idx)
+                                            .unwrap_or_else(|| inner.initial_account())),
+            None => (0 as u64, inner.initial_account()),
+        };
+
+
+        let params = &inner.params;
+        let eta = &inner.keys.eta;
+        let in_account_hash = latest_acc.1.hash(params);
+        let nullifier = nullifier(
+            in_account_hash,
+            *eta,
+            latest_acc.0.into(),
+            params,
+        );
+
+        Ok(serde_wasm_bindgen::to_value(&nullifier)
+                    .unwrap()
+                    .unchecked_into::<JsHash>())
+        
+    }
 }

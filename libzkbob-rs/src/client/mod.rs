@@ -238,7 +238,7 @@ where
         cipher::decrypt_out(self.keys.eta, &data, &self.params)
     }
 
-    fn initial_account(&self) -> Account<P::Fr> {
+    pub fn initial_account(&self) -> Account<P::Fr> {
         // Initial account should have d = pool_id to protect from reply attacks
         let d = self.pool.pool_id_num().to_num();
         let p_d = derive_key_p_d(d, self.keys.eta, &self.params).x;
