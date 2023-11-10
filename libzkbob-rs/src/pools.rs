@@ -24,6 +24,7 @@ pub enum Pool {
     GoerliETH,
     GoerliUSDC,
     ShastaUSDT,
+    NileUSDT,
 }
 
 impl Pool {
@@ -41,6 +42,7 @@ impl Pool {
             0xffff04 => Some(Pool::GoerliETH),
             0xffff05 => Some(Pool::GoerliUSDC),
             0xffff06 => Some(Pool::ShastaUSDT),
+            0xffff07 => Some(Pool::NileUSDT),
             _ => None,
         }
     }
@@ -57,6 +59,7 @@ impl Pool {
             "zkbob_goerli_eth" => Some(Pool::GoerliETH),
             "zkbob_goerli_usdc" => Some(Pool::GoerliUSDC),
             "zkbob_shasta" => Some(Pool::ShastaUSDT),
+            "zkbob_nile" => Some(Pool::NileUSDT),
             _ => None,
         }
     }
@@ -74,6 +77,7 @@ impl Pool {
             Pool::GoerliETH => 0xffff04,
             Pool::GoerliUSDC => 0xffff05,
             Pool::ShastaUSDT => 0xffff06,
+            Pool::NileUSDT => 0xffff07,
         }
     }
 
@@ -107,6 +111,7 @@ impl Pool {
             Pool::GoerliETH => "zkbob_goerli_eth",
             Pool::GoerliUSDC => "zkbob_goerli_usdc",
             Pool::ShastaUSDT => "zkbob_shasta",
+            Pool::NileUSDT => "zkbob_nile",
         }
     }
 
@@ -122,6 +127,7 @@ impl Pool {
             Pool::GoerliETH => "WETH on Goerli testnet",
             Pool::GoerliUSDC => "USDC on Goerli testnet",
             Pool::ShastaUSDT => "USDT on Shasta testnet",
+            Pool::NileUSDT => "USDT on Nile testnet",
         }
     }
 }
