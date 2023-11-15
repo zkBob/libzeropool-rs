@@ -1,7 +1,6 @@
 use std::convert::{TryInto};
 
-use crate::pools::Pool;
-use crate::{utils::keccak256, pools::{GENERIC_ADDRESS_PREFIX, POOL_ID_BITS}};
+use crate::{utils::keccak256};
 use libzeropool::{
     constants,
     fawkes_crypto::{
@@ -14,6 +13,7 @@ use libzeropool::{
 use thiserror::Error;
 
 const ADDR_LEN: usize = 46;
+const POOL_ID_BITS: usize = 24;
 
 #[derive(Error, Debug)]
 pub enum AddressParseError {
@@ -50,6 +50,9 @@ impl AddressFormat {
 pub fn parse_address<P: PoolParams>(
     address: &str,
     params: &P,
+    pool_id: u32,
+    prefix: &str,
+    generic_prefix: &str
 ) -> Result<
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d

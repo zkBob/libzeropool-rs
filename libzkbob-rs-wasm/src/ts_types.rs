@@ -109,6 +109,12 @@ export interface VK {
     ic: string[][];    // G1[]
 }
 
+export interface PoolConfig {
+    poolId: number;
+    prefix: string;
+    name?: string;
+}
+
 export interface IAddressComponents {
     format: string;
     d: string;
@@ -303,6 +309,9 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "TxInput")]
     pub type TxInput;
+
+    #[wasm_bindgen(typescript_type = "PoolConfig")]
+    pub type PoolConfig;
 
     #[wasm_bindgen(typescript_type = "IAddressComponents")]
     pub type IAddressComponents;

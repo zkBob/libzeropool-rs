@@ -42,7 +42,7 @@ use crate::{
     Account, Fr, Fs, Hashes, 
     IDepositData, IDepositPermittableData, ITransferData, IWithdrawData,
     IndexedNote, IndexedNotes, PoolParams, Transaction, UserState, POOL_PARAMS,
-    MerkleProof, Pair, TreeNode, TreeNodes,
+    MerkleProof, Pair, TreeNode, TreeNodes, PoolConfig
 };
 use tx_types::JsTxType;
 use crate::client::coldstorage::BulkData;
@@ -64,7 +64,7 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], pool_id: u32, state: UserState, network: &str) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_config: PoolConfig, state: UserState, network: &str) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
         let pool = if network.to_lowercase() == "sepolia" && pool_id == Pool::SepoliaBOB.pool_id() {
@@ -79,7 +79,7 @@ impl UserAccount {
         UserAccount::create_internal(sk, pool, state)
     }
 
-    fn create_internal(sk: &[u8], pool: Pool, state: UserState) -> Result<UserAccount, JsValue> {
+    fn create_internal(sk: &[u8], pool: PoolConfig, state: UserState) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
