@@ -93,6 +93,11 @@ impl UserAccount {
         self.inner.borrow().gen_address_for_seed(seed)
     }
 
+    #[wasm_bindgen(js_name = "generateUniversalAddressForSeed")]
+    pub fn generate_universal_address_for_seed(&self, seed: &[u8]) -> String {
+        self.inner.borrow().gen_universal_address_for_seed(seed)
+    }
+
     #[wasm_bindgen(js_name = "validateAddress")]
     pub fn validate_address(&self, address: &str) -> bool {
         self.inner.borrow().validate_address(address)
@@ -105,6 +110,15 @@ impl UserAccount {
         let p_d = Num::from_str(p_d).unwrap();
 
         self.inner.borrow().generate_address_from_components(d, p_d)
+    }
+
+    #[wasm_bindgen(js_name = "assembleUniversalAddress")]
+    pub fn assemble_universal_address(&self, d: &str, p_d: &str) -> String {
+        let d = Num::from_str(d).unwrap();
+        let d = BoundedNum::new(d);
+        let p_d = Num::from_str(p_d).unwrap();
+
+        self.inner.borrow().generate_universal_address_from_components(d, p_d)
     }
 
     #[wasm_bindgen(js_name = "convertAddressToChainSpecific")]

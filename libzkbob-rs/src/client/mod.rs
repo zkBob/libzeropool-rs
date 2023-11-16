@@ -185,7 +185,23 @@ where
         format_address::<P>(d, p_d, Some(self.pool_id))
     }
 
+    pub fn generate_universal_address_from_components(
+        &self,
+        d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
+        p_d: Num<P::Fr>
+    ) -> String {
+        format_address::<P>(d, p_d, None)
+    }
+
     pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
+        self.gen_address_for_seed_and_pool_id(seed, Some(self.pool_id))
+    }
+
+    pub fn gen_universal_address_for_seed(&self, seed: &[u8]) -> String {
+        self.gen_address_for_seed_and_pool_id(seed, None)
+    }
+
+    fn gen_address_for_seed_and_pool_id(&self, seed: &[u8], pool_id: Option<u32>) -> String {
         let mut rng = CustomRng;
 
         let sk = reduce_sk(seed);
@@ -193,7 +209,7 @@ where
         let d: BoundedNum<_, { constants::DIVERSIFIER_SIZE_BITS }> = rng.gen();
         let pk_d = derive_key_p_d(d.to_num(), keys.eta, &self.params);
 
-        format_address::<P>(d, pk_d.x, Some(self.pool_id))
+        format_address::<P>(d, pk_d.x, pool_id)
     }
 
     pub fn validate_address(&self, address: &str) -> bool {
