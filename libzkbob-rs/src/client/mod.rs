@@ -817,20 +817,20 @@ mod tests {
         let acc_optimism = UserAccount::new(Num::ZERO, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
 
-        assert!(acc_polygon.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));   // generic without a prefix
-        assert!(acc_polygon.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa")); // generic
+        assert!(acc_polygon.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));   // generic without a prefix
+        assert!(acc_polygon.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa")); // generic
         assert!(acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(!acc_polygon.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(!acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
 
-        assert!(acc_sepolia.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_sepolia.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_sepolia.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_sepolia.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i")); // true due to the same pool_id
         assert!(!acc_sepolia.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(!acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         
-        assert!(acc_optimism.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_optimism.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(!acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L")); // the lib cannot distinguish different address prefixes
@@ -838,12 +838,12 @@ mod tests {
         assert!(!acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kR*&**7i"));
         assert!(acc_optimism.validate_address("zkbob_zkbober:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(acc_optimism.validate_address("zkbob:optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
-        assert!(!acc_optimism.validate_address("zkbob:"));
+        assert!(!acc_optimism.validate_universal_address("zkbob:"));
         assert!(!acc_optimism.validate_address(":"));
         assert!(!acc_optimism.validate_address(""));
 
-        assert!(acc_optimism_eth.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_optimism_eth.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(acc_optimism_eth.validate_address("zkbob_optimism_eth:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse1j9diw"));
         assert!(!acc_optimism_eth.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(!acc_optimism_eth.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
