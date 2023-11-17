@@ -30,7 +30,7 @@ use thiserror::Error;
 
 use self::state::{State, Transaction};
 use crate::{
-    address::{format_address, parse_address, AddressParseError},
+    address::{format_address, parse_address, AddressParseError, AddressFormat},
     keys::{reduce_sk, Keys},
     random::CustomRng,
     merkle::Hash,
@@ -213,12 +213,22 @@ where
     }
 
     pub fn validate_address(&self, address: &str) -> bool {
-        parse_address(address, &self.params, self.pool_id).is_ok()
+        match parse_address(address, &self.params, self.pool_id) {
+            Ok((_, _, format)) => format == AddressFormat::PoolSpecific,
+            Err(_) => false,
+        }
+    }
+
+    pub fn validate_universal_address(&self, address: &str) -> bool {
+        match parse_address(address, &self.params, self.pool_id) {
+            Ok((_, _, format)) => format == AddressFormat::Generic,
+            Err(_) => false,
+        }
     }
 
     pub fn is_own_address(&self, address: &str) -> bool {
         match parse_address::<P>(address, &self.params, self.pool_id) {
-            Ok((d, p_d)) => {
+            Ok((d, p_d, _)) => {
                 self.is_derived_from_our_sk(d, p_d)
             },
             Err(_) => false
@@ -395,7 +405,7 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d) = parse_address::<P>(&dest.to, &self.params, self.pool_id)?;
+                        let (to_d, to_p_d, _) = parse_address::<P>(&dest.to, &self.params, self.pool_id)?;
                         output_value += dest.amount.to_num();
                         Ok(Note {
                             d: to_d,

@@ -34,6 +34,7 @@ pub enum AddressParseError {
     DeserializationError(#[from] std::io::Error),
 }
 
+#[derive(PartialEq)]
 pub enum AddressFormat {
     PoolSpecific,
     Generic,
@@ -56,11 +57,12 @@ pub fn parse_address<P: PoolParams>(
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
         Num<P::Fr>, // p_d
+        AddressFormat,
     ),
     AddressParseError,
 >{
-    let (d, p_d, _, _, _) = parse_address_ext(address, params, pool_id)?;
-    Ok((d, p_d))
+    let (d, p_d, _, format, _) = parse_address_ext(address, params, pool_id)?;
+    Ok((d, p_d, format))
 }
 
 pub fn parse_address_ext<P: PoolParams>(
@@ -77,7 +79,7 @@ pub fn parse_address_ext<P: PoolParams>(
     ),
     AddressParseError,
 >{
-    // ignoring any prefixes, just try to check checksum
+    // ignoring any prefixes, just try to validate checksum
     let addr_components: Vec<&str> = address.split(':').filter(|s| !s.is_empty()).collect();  
     match addr_components.last() {
         Some(addr) => {

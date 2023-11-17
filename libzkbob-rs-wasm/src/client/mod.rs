@@ -103,6 +103,11 @@ impl UserAccount {
         self.inner.borrow().validate_address(address)
     }
 
+    #[wasm_bindgen(js_name = "validateUniversalAddress")]
+    pub fn validate_universal_address(&self, address: &str) -> bool {
+        self.inner.borrow().validate_universal_address(address)
+    }
+
     #[wasm_bindgen(js_name = "assembleAddress")]
     pub fn assemble_address(&self, d: &str, p_d: &str) -> String {
         let d = Num::from_str(d).unwrap();
@@ -123,7 +128,7 @@ impl UserAccount {
 
     #[wasm_bindgen(js_name = "convertAddressToChainSpecific")]
     pub fn convert_address_to_chain_specific(&self, address: &str) -> Result<String, JsValue> {
-        let (d, p_d) = 
+        let (d, p_d, _) = 
             parse_address::<PoolParams>(address, &POOL_PARAMS, self.inner.borrow().pool_id).map_err(|err| js_err!(&err.to_string()))?;
 
         Ok(self.inner.borrow().generate_address_from_components(d, p_d))
