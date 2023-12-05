@@ -92,7 +92,6 @@ pub fn parse_address_ext<P: PoolParams>(
 
             if addr_hash[0..=3] != checksum {
                 // calcing checksum [pool-specific format]
-                const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
                 let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
                 pool_id_to_bytes_be::<P>(pool_id).serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
                 hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
@@ -155,7 +154,6 @@ pub fn format_address<P: PoolParams>(
     let checksum_hash = match pool_id {
         // pool-specific format
         Some(pool_id) => {
-            const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
             let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
             pool_id_to_bytes_be::<P>(pool_id).serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
             hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&keccak256(&buf[0..42]));
@@ -166,23 +164,10 @@ pub fn format_address<P: PoolParams>(
     };
     buf[42..ADDR_LEN].clone_from_slice(&checksum_hash[0..4]);
 
-    let address_part = bs58::encode(buf).into_string();
-
-    format!("{}", address_part)
-
+    bs58::encode(buf).into_string()
 }
 
 fn pool_id_to_bytes_be<P: PoolParams>(pool_id: u32) -> [u8; POOL_ID_BYTES] {
-    /*/ preparing pool id for checksum validation
-    const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
-    let pool_id_num = Num::<P::Fr>::from_uint(NumRepr(Uint::from_u64(pool_id as u64))).unwrap();        
-    let pool_id_bytes = pool_id_num.to_uint().0.to_big_endian();
-    let pool_id_be: [u8; POOL_ID_BYTES] = pool_id_bytes[32 - POOL_ID_BYTES..32].try_into().unwrap();*/
-
     // preparing pool id for checksum validation
-    const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
-    let pool_id_num = Num::<P::Fr>::from_uint(NumRepr(Uint::from_u64(pool_id as u64))).unwrap();
-    let pool_id_bytes = pool_id_num.to_uint().0.to_big_endian();
-
-    pool_id_bytes[32 - POOL_ID_BYTES..32].try_into().unwrap()
+    pool_id.to_be_bytes()[4 - POOL_ID_BYTES..].try_into().unwrap()
 }
