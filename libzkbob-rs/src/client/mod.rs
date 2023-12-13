@@ -96,22 +96,43 @@ pub struct TxOutput<Fr: PrimeField> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TxOperator<Fr: PrimeField> {
+    pub proxy_address: Vec<u8>,
+    pub proxy_fee: TokenAmount<Fr>,
+    pub prover_fee: TokenAmount<Fr>,
+}
+
+impl<Fr: PrimeField> TxOperator<Fr> {
+    pub fn serialize(&self, dst: &mut Vec<u8>) {
+        dst.append(&mut self.proxy_address.clone());
+        let raw_proxy_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
+        let raw_prover_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
+        dst.write_all(&raw_proxy_fee.to_be_bytes()).unwrap();
+        dst.write_all(&raw_prover_fee.to_be_bytes()).unwrap();
+    }
+
+    pub fn total_fee(&self) -> Num<Fr> {
+        self.proxy_fee.to_num() + self.prover_fee.to_num()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TxType<Fr: PrimeField> {
-    // fee, data, tx_outputs
-    Transfer(TokenAmount<Fr>, Vec<u8>, Vec<TxOutput<Fr>>),
-    // fee, data, deposit_amount
-    Deposit(TokenAmount<Fr>, Vec<u8>, TokenAmount<Fr>),
-    // fee, data, deposit_amount, deadline, holder
+    // operator, data, tx_outputs
+    Transfer(TxOperator<Fr>, Vec<u8>, Vec<TxOutput<Fr>>),
+    // operator, data, deposit_amount
+    Deposit(TxOperator<Fr>, Vec<u8>, TokenAmount<Fr>),
+    // operator, data, deposit_amount, deadline, holder
     DepositPermittable(
-        TokenAmount<Fr>,
+        TxOperator<Fr>,
         Vec<u8>,
         TokenAmount<Fr>,
         u64,
         Vec<u8>
     ),
-    // fee, data, withdraw_amount, to, native_amount, energy_amount
+    // operator, data, withdraw_amount, to, native_amount, energy_amount
     Withdraw(
-        TokenAmount<Fr>,
+        TxOperator<Fr>,
         Vec<u8>,
         TokenAmount<Fr>,
         Vec<u8>,
@@ -320,34 +341,30 @@ where
         let (fee, tx_data, user_data) = {
             let mut tx_data: Vec<u8> = vec![];
             match &tx {
-                TxType::Deposit(fee, user_data, _) => {
-                    let raw_fee: u64 = fee.to_num().try_into().unwrap();
-                    tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
-                    (fee, tx_data, user_data)
-                }
-                TxType::DepositPermittable(fee, user_data, _, deadline, holder) => {
-                    let raw_fee: u64 = fee.to_num().try_into().unwrap();
+                TxType::Deposit(operator, user_data, _) => {
+                    operator.serialize(&mut tx_data);
 
-                    tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
+                    (operator.total_fee(), tx_data, user_data)
+                }
+                TxType::DepositPermittable(operator, user_data, _, deadline, holder) => {
+                    operator.serialize(&mut tx_data);
                     tx_data.write_all(&deadline.to_be_bytes()).unwrap();
                     tx_data.append(&mut holder.clone());
                     
-                    (fee, tx_data, user_data)
+                    (operator.total_fee(), tx_data, user_data)
                 }
-                TxType::Transfer(fee, user_data, _) => {
-                    let raw_fee: u64 = fee.to_num().try_into().unwrap();
-                    tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
-                    (fee, tx_data, user_data)
-                }
-                TxType::Withdraw(fee, user_data, _, reciever, native_amount, _) => {
-                    let raw_fee: u64 = fee.to_num().try_into().unwrap();
-                    let raw_native_amount: u64 = native_amount.to_num().try_into().unwrap();
+                TxType::Transfer(operator, user_data, _) => {
+                    operator.serialize(&mut tx_data);
 
-                    tx_data.write_all(&raw_fee.to_be_bytes()).unwrap();
+                    (operator.total_fee(), tx_data, user_data)
+                }
+                TxType::Withdraw(operator, user_data, _, reciever, native_amount, _) => {
+                    operator.serialize(&mut tx_data);
+                    let raw_native_amount: u64 = native_amount.to_num().try_into().unwrap();
                     tx_data.write_all(&raw_native_amount.to_be_bytes()).unwrap();
                     tx_data.append(&mut reciever.clone());
 
-                    (fee, tx_data, user_data)
+                    (operator.total_fee(), tx_data, user_data)
                 }
             }
         };
@@ -418,7 +435,7 @@ where
                 (0, (0..).map(|_| zero_note()).take(constants::OUT).collect())
             };
 
-        let mut delta_value = -fee.as_num();
+        let mut delta_value = -fee;
         // By default all account energy will be withdrawn on withdraw tx
         let mut delta_energy = Num::ZERO;
 
@@ -432,11 +449,11 @@ where
         }
         let new_balance = match &tx {
             TxType::Transfer(_, _, _) => {
-                if input_value.to_uint() >= (output_value + fee.as_num()).to_uint() {
-                    input_value - output_value - fee.as_num()
+                if input_value.to_uint() >= (output_value + fee).to_uint() {
+                    input_value - output_value - fee
                 } else {
                     return Err(CreateTxError::InsufficientBalance(
-                        (output_value + fee.as_num()).to_string(),
+                        (output_value + fee).to_string(),
                         input_value.to_string(),
                     ));
                 }
@@ -651,9 +668,15 @@ mod tests {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
 
+        let op = TxOperator {
+            proxy_address: vec![],
+            proxy_fee: BoundedNum::ZERO,
+            prover_fee: BoundedNum::ZERO,
+        };
+
         acc.create_tx(
             TxType::Deposit(
-                BoundedNum::ZERO,
+                op,
                 vec![],
                 BoundedNum::ZERO,
             ),
@@ -668,9 +691,15 @@ mod tests {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
 
+        let op = TxOperator {
+            proxy_address: vec![],
+            proxy_fee: BoundedNum::ZERO,
+            prover_fee: BoundedNum::ONE,
+        };
+
         acc.create_tx(
             TxType::Deposit(
-                BoundedNum::new(Num::ZERO),
+                op,
                 vec![],
                 BoundedNum::new(Num::ONE),
             ),
@@ -693,8 +722,14 @@ mod tests {
             amount: BoundedNum::new(Num::ZERO),
         };
 
+        let op = TxOperator {
+            proxy_address: vec![],
+            proxy_fee: BoundedNum::ZERO,
+            prover_fee: BoundedNum::ZERO,
+        };
+
         acc.create_tx(
-            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out]),
+            TxType::Transfer(op, vec![], vec![out]),
             None,
             None,
         )
@@ -714,8 +749,14 @@ mod tests {
             amount: BoundedNum::new(Num::ONE),
         };
 
+        let op = TxOperator {
+            proxy_address: vec![],
+            proxy_fee: BoundedNum::ZERO,
+            prover_fee: BoundedNum::ZERO,
+        };
+
         acc.create_tx(
-            TxType::Transfer(BoundedNum::new(Num::ZERO), vec![], vec![out]),
+            TxType::Transfer(op, vec![], vec![out]),
             None,
             None,
         )
