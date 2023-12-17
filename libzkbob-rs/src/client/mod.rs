@@ -102,6 +102,16 @@ pub struct TxOperator<Fr: PrimeField> {
     pub prover_fee: TokenAmount<Fr>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExtraItem {
+    pub leaf_index: u8, // encrypted items will use associated account\note key
+                        // if leaf doesn't exist the item cannot be encrypted
+    pub pad_length: u16,  // how many random bytes should be add before the data
+    pub need_encrypt: bool,
+    pub data: Vec<u8>,  // the rust library doesn't know about the item
+                        // content and interpret it just as a byte array
+}
+
 impl<Fr: PrimeField> TxOperator<Fr> {
     pub fn serialize(&self, dst: &mut Vec<u8>) {
         dst.append(&mut self.proxy_address.clone());
@@ -118,22 +128,22 @@ impl<Fr: PrimeField> TxOperator<Fr> {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TxType<Fr: PrimeField> {
-    // operator, data, tx_outputs
-    Transfer(TxOperator<Fr>, Vec<u8>, Vec<TxOutput<Fr>>),
-    // operator, data, deposit_amount
-    Deposit(TxOperator<Fr>, Vec<u8>, TokenAmount<Fr>),
-    // operator, data, deposit_amount, deadline, holder
+    // operator, extra_data, tx_outputs
+    Transfer(TxOperator<Fr>, Vec<ExtraItem>, Vec<TxOutput<Fr>>),
+    // operator, extra_data, deposit_amount
+    Deposit(TxOperator<Fr>, Vec<ExtraItem>, TokenAmount<Fr>),
+    // operator, extra_data, deposit_amount, deadline, holder
     DepositPermittable(
         TxOperator<Fr>,
-        Vec<u8>,
+        Vec<ExtraItem>,
         TokenAmount<Fr>,
         u64,
         Vec<u8>
     ),
-    // operator, data, withdraw_amount, to, native_amount, energy_amount
+    // operator, extra_data, withdraw_amount, to, native_amount, energy_amount
     Withdraw(
         TxOperator<Fr>,
-        Vec<u8>,
+        Vec<ExtraItem>,
         TokenAmount<Fr>,
         Vec<u8>,
         TokenAmount<Fr>,
