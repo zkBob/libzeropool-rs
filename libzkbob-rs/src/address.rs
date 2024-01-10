@@ -1,12 +1,15 @@
-use std::convert::{TryInto};
+use std::convert::TryInto;
 
-use crate::pools::Pool;
-use crate::{utils::keccak256, pools::{GENERIC_ADDRESS_PREFIX, POOL_ID_BITS}};
+const POOL_ID_BITS: usize = 24;
+const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
+
+use crate::utils::keccak256;
 use libzeropool::{
     constants,
     fawkes_crypto::{
         borsh::{BorshDeserialize, BorshSerialize},
-        ff_uint::Num, native::ecc::EdwardsPoint,
+        ff_uint::{Num, Uint, NumRepr},
+        native::ecc::EdwardsPoint,
     },
     native::boundednum::BoundedNum,
     native::params::PoolParams,
@@ -31,8 +34,8 @@ pub enum AddressParseError {
     DeserializationError(#[from] std::io::Error),
 }
 
+#[derive(PartialEq)]
 pub enum AddressFormat {
-    Old,
     PoolSpecific,
     Generic,
 }
@@ -40,7 +43,6 @@ pub enum AddressFormat {
 impl AddressFormat {
     pub fn name(&self) -> &str {
         match self {
-            AddressFormat::Old => "old",
             AddressFormat::PoolSpecific => "pool",
             AddressFormat::Generic => "generic",
         }
@@ -50,83 +52,64 @@ impl AddressFormat {
 pub fn parse_address<P: PoolParams>(
     address: &str,
     params: &P,
+    pool_id: u32,   // current pool id
 ) -> Result<
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
         Num<P::Fr>, // p_d
-        Option<Pool>,   // None for generic addresses
+        AddressFormat,
     ),
     AddressParseError,
 >{
-    let (d, p_d, pool, _, _) = parse_address_ext(address, params)?;
-    Ok((d, p_d, pool))
+    let (d, p_d, _, format, _) = parse_address_ext(address, params, pool_id)?;
+    Ok((d, p_d, format))
 }
 
 pub fn parse_address_ext<P: PoolParams>(
     address: &str,
     params: &P,
+    pool_id: u32,
 ) -> Result<
     (
         BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>, // d
         Num<P::Fr>, // p_d
-        Option<Pool>,   // None for generic addresses
+        Option<u32>,   // None for generic addresses (otherwse pool id)
         AddressFormat,
         [u8; 4],    // checksum
     ),
     AddressParseError,
 >{
-    if address.find(':').is_some() {
-        // address with prefix
-        let addr_components: Vec<&str> = address.split(':').collect();  
-        if addr_components.len() == 2 {
-            let pool = Pool::from_prefix(addr_components[0]);
+    // ignoring any prefixes, just try to validate checksum
+    let addr_components: Vec<&str> = address.split(':').filter(|s| !s.is_empty()).collect();  
+    match addr_components.last() {
+        Some(addr) => {
+            // parse address
             let (d,
                 p_d,
                 addr_hash,
-                checksum) = parse_address_raw(addr_components[1], params)?;
+                checksum) = parse_address_raw(addr, params)?;
 
-            match pool {
-                Some(pool) => {
-                    // pool-specific address
-                    const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
-                    let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-                    pool.pool_id_bytes_be::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
-                    hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
 
-                    if keccak256(&hash_src)[0..=3] != checksum {
-                        return Err(AddressParseError::InvalidChecksum);
-                    }
-                    return Ok((d, p_d, Some(pool), AddressFormat::PoolSpecific, checksum));
-                },
-                None => {
-                    if addr_components[0].to_lowercase() == GENERIC_ADDRESS_PREFIX {
-                        // generic address
-                        if addr_hash[0..=3] != checksum {
-                            return Err(AddressParseError::InvalidChecksum);
-                        }
-                        return Ok((d, p_d, None, AddressFormat::Generic, checksum));
-                    } else {
-                        return Err(AddressParseError::InvalidPrefix(addr_components[0].to_string()))
-                    }
-                },
-            };
-        }
+            if addr_hash[0..=3] != checksum {
+                // calcing checksum [pool-specific format]
+                let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
+                pool_id_to_bytes_be::<P>(pool_id).serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+                hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&addr_hash);
 
-        Err(AddressParseError::InvalidFormat)
-    } else {
-        // old format without prefix
-        let (d,
-            p_d,
-            addr_hash,
-            checksum) = parse_address_raw(address, params)?;
-        
-        if addr_hash[0..=3] != checksum {
-            return Err(AddressParseError::InvalidChecksum);
-        }
+                if keccak256(&hash_src)[0..=3] == checksum {
+                    Ok((d, p_d, Some(pool_id), AddressFormat::PoolSpecific, checksum))
+                } else {
+                    Err(AddressParseError::InvalidChecksum)
+                }
+            } else {
+                // generic format
+                Ok((d, p_d, None, AddressFormat::Generic, checksum))
+            }
 
-        // the old format should be acceptable on the Polygon BOB pool only
-        Ok((d, p_d, Some(Pool::PolygonUSDC), AddressFormat::Old, checksum))
+        },
+        None => Err(AddressParseError::InvalidFormat),
     }
+    
 }
 
 fn parse_address_raw<P: PoolParams>(
@@ -154,11 +137,13 @@ fn parse_address_raw<P: PoolParams>(
     }
 }
 
-// generates shielded address in format "pool_prefix:base58(d ++ p_d ++ checksum)"
+// generates shielded address in format "base58(d ++ p_d ++ checksum)"
+// pool prefix doesn't append here
+// both address types (pool-specific\generic) can generated here
 pub fn format_address<P: PoolParams>(
     d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
     p_d: Num<P::Fr>,
-    pool: Option<Pool>, // set pool to None to generate universal address for all pools
+    pool_id: Option<u32>, // set pool_id to None to generate universal address for all pools
 ) -> String {
     let mut buf: [u8; ADDR_LEN] = [0; ADDR_LEN];
 
@@ -166,24 +151,23 @@ pub fn format_address<P: PoolParams>(
     p_d.serialize(&mut &mut buf[10..42]).unwrap();
 
     // there are two ways for checksum calculation
-    let (checksum_hash, address_prefix) = match pool {
+    let checksum_hash = match pool_id {
         // pool-specific format
-        Some(pool) => {
-            const POOL_ID_BYTES: usize = POOL_ID_BITS >> 3;
+        Some(pool_id) => {
             let mut hash_src: [u8; POOL_ID_BYTES + 32] = [0; POOL_ID_BYTES + 32];
-            //let pool_id = pool.pool_id_num::<P::Fr>().to_num().to_uint().0.to_big_endian();
-            //let pool_id_be: [u8; POOL_ID_BYTES] = pool_id[32 - POOL_ID_BYTES..32].try_into().unwrap();
-            pool.pool_id_bytes_be::<P::Fr>().serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
+            pool_id_to_bytes_be::<P>(pool_id).serialize(& mut &mut hash_src[0..POOL_ID_BYTES]).unwrap();
             hash_src[POOL_ID_BYTES..POOL_ID_BYTES + 32].clone_from_slice(&keccak256(&buf[0..42]));
-            (keccak256(&hash_src), pool.address_prefix().to_owned())
+            keccak256(&hash_src)
         },
         // generic format (for all pools, when pool_id isn't specified)
-        None => (keccak256(&buf[0..42]), GENERIC_ADDRESS_PREFIX.to_string()),
+        None => keccak256(&buf[0..42]),
     };
     buf[42..ADDR_LEN].clone_from_slice(&checksum_hash[0..4]);
 
-    let address_part = bs58::encode(buf).into_string();
+    bs58::encode(buf).into_string()
+}
 
-    format!("{}:{}", address_prefix, address_part)
-
+fn pool_id_to_bytes_be<P: PoolParams>(pool_id: u32) -> [u8; POOL_ID_BYTES] {
+    // preparing pool id for checksum validation
+    pool_id.to_be_bytes()[4 - POOL_ID_BYTES..].try_into().unwrap()
 }

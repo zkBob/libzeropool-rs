@@ -30,8 +30,7 @@ use thiserror::Error;
 
 use self::state::{State, Transaction};
 use crate::{
-    address::{format_address, parse_address, AddressParseError},
-    pools::Pool,
+    address::{format_address, parse_address, AddressParseError, AddressFormat},
     keys::{reduce_sk, Keys},
     random::CustomRng,
     merkle::Hash,
@@ -52,8 +51,6 @@ pub enum CreateTxError {
     ProofNotFound(u64),
     #[error("Failed to parse address: {0}")]
     AddressParseError(#[from] AddressParseError),
-    #[error("The provided zkAddress belong to the wrong pool ({provided}, {expected})")]
-    MismatchedPools { provided: String, expected: String },
     #[error("Insufficient balance: sum of outputs is greater than sum of inputs: {0} > {1}")]
     InsufficientBalance(String, String),
     #[error("Insufficient energy: available {0}, received {1}")]
@@ -152,7 +149,7 @@ pub enum TxType<Fr: PrimeField> {
 }
 
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
-    pub pool: Pool,
+    pub pool_id: u32,
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
@@ -166,11 +163,11 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: Num<P::Fs>, pool: Pool, state: State<D, P>, params: P) -> Self {
+    pub fn new(sk: Num<P::Fs>, pool_id: u32, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
-            pool,
+            pool_id,
             keys,
             state,
             params,
@@ -179,9 +176,9 @@ where
     }
 
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool: Pool, state: State<D, P>, params: P) -> Self {
+    pub fn from_seed(seed: &[u8], pool_id: u32, state: State<D, P>, params: P) -> Self {
         let sk = reduce_sk(seed);
-        Self::new(sk, pool, state, params)
+        Self::new(sk, pool_id, state, params)
     }
 
     fn generate_address_components(
@@ -201,7 +198,7 @@ where
     pub fn generate_address(&self) -> String {
         let (d, p_d) = self.generate_address_components();
 
-        format_address::<P>(d, p_d, Some(self.pool))
+        format_address::<P>(d, p_d, Some(self.pool_id))
     }
 
     /// Generates a new private generic address (for all pools)
@@ -216,10 +213,26 @@ where
         d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
         p_d: Num<P::Fr>
     ) -> String {
-        format_address::<P>(d, p_d, Some(self.pool))
+        format_address::<P>(d, p_d, Some(self.pool_id))
+    }
+
+    pub fn generate_universal_address_from_components(
+        &self,
+        d: BoundedNum<P::Fr, { constants::DIVERSIFIER_SIZE_BITS }>,
+        p_d: Num<P::Fr>
+    ) -> String {
+        format_address::<P>(d, p_d, None)
     }
 
     pub fn gen_address_for_seed(&self, seed: &[u8]) -> String {
+        self.gen_address_for_seed_and_pool_id(seed, Some(self.pool_id))
+    }
+
+    pub fn gen_universal_address_for_seed(&self, seed: &[u8]) -> String {
+        self.gen_address_for_seed_and_pool_id(seed, None)
+    }
+
+    fn gen_address_for_seed_and_pool_id(&self, seed: &[u8], pool_id: Option<u32>) -> String {
         let mut rng = CustomRng;
 
         let sk = reduce_sk(seed);
@@ -227,29 +240,27 @@ where
         let d: BoundedNum<_, { constants::DIVERSIFIER_SIZE_BITS }> = rng.gen();
         let pk_d = derive_key_p_d(d.to_num(), keys.eta, &self.params);
 
-        format_address::<P>(d, pk_d.x, Some(self.pool))
+        format_address::<P>(d, pk_d.x, pool_id)
     }
 
     pub fn validate_address(&self, address: &str) -> bool {
-        match parse_address(address, &self.params) {
-            Ok((_, _, pool)) => {
-                match pool {
-                    Some(pool) => pool == self.pool,
-                    None => true
-                }
-            },
+        match parse_address(address, &self.params, self.pool_id) {
+            Ok((_, _, format)) => format == AddressFormat::PoolSpecific,
+            Err(_) => false,
+        }
+    }
+
+    pub fn validate_universal_address(&self, address: &str) -> bool {
+        match parse_address(address, &self.params, self.pool_id) {
+            Ok((_, _, format)) => format == AddressFormat::Generic,
             Err(_) => false,
         }
     }
 
     pub fn is_own_address(&self, address: &str) -> bool {
-        match parse_address::<P>(address, &self.params) {
-            Ok((d, p_d, pool)) => {
-                let is_correct_pool = match pool {
-                    Some(pool) => pool == self.pool,
-                    None => true,
-                };
-                self.is_derived_from_our_sk(d, p_d) && is_correct_pool
+        match parse_address::<P>(address, &self.params, self.pool_id) {
+            Ok((d, p_d, _)) => {
+                self.is_derived_from_our_sk(d, p_d)
             },
             Err(_) => false
         }
@@ -271,7 +282,7 @@ where
 
     pub fn initial_account(&self) -> Account<P::Fr> {
         // Initial account should have d = pool_id to protect from reply attacks
-        let d = self.pool.pool_id_num().to_num();
+        let d = Num::<P::Fr>::from_uint(NumRepr(Uint::from_u64(self.pool_id as u64))).unwrap();
         let p_d = derive_key_p_d(d, self.keys.eta, &self.params).x;
         Account {
             d: BoundedNum::new(d),
@@ -421,19 +432,14 @@ where
                 let out_notes = outputs
                     .iter()
                     .map(|dest| {
-                        let (to_d, to_p_d, pool) = parse_address::<P>(&dest.to, &self.params)?;
-
-                        if pool.is_none() || pool.unwrap() == self.pool {
-                            output_value += dest.amount.to_num();
-                            Ok(Note {
-                                d: to_d,
-                                p_d: to_p_d,
-                                b: dest.amount,
-                                t: rng.gen(),
-                            })
-                        } else {
-                            Err(CreateTxError::MismatchedPools { provided: pool.unwrap().to_string(), expected: self.pool.to_string() })
-                        }
+                        let (to_d, to_p_d, _) = parse_address::<P>(&dest.to, &self.params, self.pool_id)?;
+                        output_value += dest.amount.to_num();
+                        Ok(Note {
+                            d: to_d,
+                            p_d: to_p_d,
+                            b: dest.amount,
+                            t: rng.gen(),
+                        })
                     })
                     // fill out remaining output notes with zeroes
                     .chain((0..).map(|_| Ok(zero_note())))
@@ -564,7 +570,7 @@ where
             delta_value,
             delta_energy,
             delta_index,
-            self.pool.pool_id_num().to_num(),
+            Num::<P::Fr>::from_uint(NumRepr(Uint::from_u64(self.pool_id as u64))).unwrap(),
         );
 
         // calculate virtual subtree from the optimistic state
@@ -676,7 +682,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -699,7 +705,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -723,7 +729,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -750,7 +756,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -777,13 +783,13 @@ mod tests {
     fn test_user_account_is_own_address() {
         let acc_1 = UserAccount::new(
             Num::ZERO,
-            Pool::GoerliBOB,
+            0xffff02,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
-            Pool::GoerliBOB,
+            0xffff02,
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
@@ -805,7 +811,7 @@ mod tests {
         let state = State::init_test(POOL_PARAMS.clone());
         let mut user_account = UserAccount::new(
             Num::ZERO,
-            Pool::OptimismUSDC,
+            1,
             state,
             POOL_PARAMS.clone()
         );
@@ -857,38 +863,38 @@ mod tests {
 
     #[test]
     fn test_chain_specific_addresses() {
-        let acc_polygon = UserAccount::new(Num::ZERO, Pool::PolygonUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_sepolia = UserAccount::new(Num::ZERO, Pool::SepoliaBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism = UserAccount::new(Num::ZERO, Pool::OptimismUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism_eth = UserAccount::new(Num::ZERO, Pool::OptimismETH, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_polygon = UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_sepolia = UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism = UserAccount::new(Num::ZERO, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
 
-        assert!(acc_polygon.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_polygon.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_polygon.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));   // generic without a prefix
+        assert!(acc_polygon.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa")); // generic
         assert!(acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(!acc_polygon.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(!acc_polygon.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
 
-        assert!(!acc_sepolia.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_sepolia.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(!acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
+        assert!(acc_sepolia.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_sepolia.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i")); // true due to the same pool_id
         assert!(!acc_sepolia.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         assert!(!acc_sepolia.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
         
-        assert!(!acc_optimism.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_optimism.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(!acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
-        assert!(!acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(acc_optimism.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L")); // the lib cannot distinguish different address prefixes
         assert!(!acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(!acc_optimism.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kR*&**7i"));
-        assert!(!acc_optimism.validate_address("zkbob_zkbober:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
-        assert!(!acc_optimism.validate_address("zkbob:optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
-        assert!(!acc_optimism.validate_address("zkbob:"));
+        assert!(acc_optimism.validate_address("zkbob_zkbober:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(acc_optimism.validate_address("zkbob:optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
+        assert!(!acc_optimism.validate_universal_address("zkbob:"));
         assert!(!acc_optimism.validate_address(":"));
         assert!(!acc_optimism.validate_address(""));
 
-        assert!(!acc_optimism_eth.validate_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
-        assert!(acc_optimism_eth.validate_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
+        assert!(acc_optimism_eth.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));
         assert!(acc_optimism_eth.validate_address("zkbob_optimism_eth:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse1j9diw"));
         assert!(!acc_optimism_eth.validate_address("zkbob_polygon:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kRF7i"));
         assert!(!acc_optimism_eth.validate_address("zkbob_optimism:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5vHs5L"));
@@ -898,14 +904,13 @@ mod tests {
     #[test]
     fn test_chain_specific_address_ownable() {
         let accs = [
-            UserAccount::new(Num::ZERO, Pool::PolygonUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::OptimismUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::OptimismETH, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::SepoliaBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::GoerliBOB, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, Pool::GoerliOptimismUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 2, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff02, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff03, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
         ];
-        let acc2 = UserAccount::new(Num::ONE, Pool::OptimismUSDC, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc2 = UserAccount::new(Num::ONE, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
         let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
 
