@@ -479,6 +479,7 @@ impl UserAccount {
             .into_iter()
             .map(|bulk| -> Vec<ParseResult> {
                 let eta = &self.inner.borrow().keys.eta;
+                let kappa = &self.inner.borrow().keys.kappa;
                 let params = &self.inner.borrow().params;
                 let range = from_index.unwrap_or(0)..to_index.unwrap_or(u64::MAX);
                 let bulk_results: Vec<ParseResult> = vec_into_iter(bulk.txs)
@@ -490,6 +491,7 @@ impl UserAccount {
                             &tx.memo,
                             Some(&tx.tx_hash),
                             eta,
+                            kappa,
                             params
                         ).ok()
                     })
