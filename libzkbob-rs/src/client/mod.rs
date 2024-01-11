@@ -277,7 +277,7 @@ where
 
     /// Attempts to decrypt account and notes.
     pub fn decrypt_pair(&self, data: Vec<u8>) -> Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
-        cipher::decrypt_out(self.keys.eta, &data, &self.params)
+        cipher::decrypt_out(self.keys.eta, &self.keys.kappa, &data, &self.params)
     }
 
     pub fn initial_account(&self) -> Account<P::Fr> {
@@ -526,7 +526,7 @@ where
             // No need to include all the zero notes in the encrypted transaction
             let out_notes = &out_notes[0..num_real_out_notes];
 
-            cipher::encrypt(&entropy, keys.eta, out_account, out_notes, &self.params)
+            cipher::encrypt(&entropy, &keys.kappa, out_account, out_notes, &self.params)
         };
 
         // Hash input account + notes filling remaining space with non-hashed zeroes
