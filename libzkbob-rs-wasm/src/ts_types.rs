@@ -119,9 +119,18 @@ export interface IAddressComponents {
     is_pool_valid: boolean;
 }
 
+export interface IExtraItem {
+    leaf_index: number;
+    pad_length: number;
+    need_encrypt: boolean;
+    data: Uint8Array;
+}
+
 export interface ITxBaseFields {
-    fee: string;
-    data?: Uint8Array;
+    proxy: Uint8Array;
+    proxy_fee: string;
+    prover_fee: string;
+    data: IExtraItem[];
 }
 
 export interface IDepositData extends ITxBaseFields {

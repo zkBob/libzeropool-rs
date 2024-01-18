@@ -6,7 +6,7 @@ use libzkbob_rs::libzeropool::{
             self,
             symcipher_decryption_keys,
             decrypt_account_no_validate,
-            decrypt_note_no_validate, Version
+            decrypt_note_no_validate, MessageEncryptionType
         },
         key::{
             self,derive_key_p_d
@@ -241,7 +241,7 @@ pub fn parse_tx(
         return Err(ParseError::NoPrefix(index));
     }
 
-    let (num_items, version) =
+    let (num_items, enc_type) =
         cipher::parse_memo_header(&mut memo.as_slice()).ok_or(ParseError::NoPrefix(0))?;
 
     if num_items > constants::OUT + 1 {
@@ -252,9 +252,9 @@ pub fn parse_tx(
         ));
     }
 
-    match version {
+    match enc_type {
         
-        Version::DelegatedDeposit => {// Special case: transaction contains delegated deposits
+        MessageEncryptionType::Plain => {// Special case: transaction contains delegated deposits
             let num_deposits = num_items as usize;
 
             let delegated_deposits = memo[4..]
@@ -326,7 +326,7 @@ pub fn parse_tx(
 
             return Ok(parse_result);
         }
-        Version::SymmetricEncryption | Version::Original => {// regular case: simple transaction memo
+        MessageEncryptionType::Symmetric | MessageEncryptionType::ECDH => {// regular case: simple transaction memo
             let num_hashes = num_items;
             let hashes = (&memo[4..])
                 .chunks(32)

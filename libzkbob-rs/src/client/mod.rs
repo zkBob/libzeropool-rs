@@ -590,8 +590,9 @@ where
 
         #[allow(clippy::redundant_clone)]
         memo_data.append(&mut tx_data.clone());
+        memo_data.extend((ciphertext.len() as u16).to_be_bytes());
         memo_data.extend(&ciphertext);
-        memo_data.append(&mut user_data.clone());
+        // TODO: append extra data here
 
         let memo_hash = keccak256(&memo_data);
         let memo = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&memo_hash)));

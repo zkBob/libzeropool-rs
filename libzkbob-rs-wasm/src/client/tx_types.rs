@@ -1,5 +1,5 @@
 use crate::{Fr, IDepositData, IDepositPermittableData, ITransferData, IWithdrawData, IMultiTransferData, IMultiWithdrawData};
-use libzkbob_rs::client::{TokenAmount, TxOutput, TxType as NativeTxType};
+use libzkbob_rs::client::{TokenAmount, TxOutput, TxType as NativeTxType, ExtraItem, TxOperator};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -23,8 +23,10 @@ pub trait JsMultiTxType {
 #[wasm_bindgen]
 #[derive(Deserialize)]
 pub struct TxBaseFields {
-    fee: TokenAmount<Fr>,
-    data: Option<Vec<u8>>,
+    proxy: Vec<u8>,
+    proxy_fee: TokenAmount<Fr>,
+    prover_fee: TokenAmount<Fr>,
+    data: Vec<ExtraItem>,
 }
 
 #[wasm_bindgen]
@@ -42,9 +44,15 @@ impl JsTxType for IDepositData {
             amount,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
+        let operator = TxOperator {
+            proxy_address: base_fields.proxy,
+            proxy_fee: base_fields.proxy_fee,
+            prover_fee: base_fields.prover_fee,
+        };
+
         Ok(NativeTxType::Deposit(
-            base_fields.fee,
-            base_fields.data.unwrap_or_default(),
+            operator,
+            base_fields.data,
             amount,
         ))
     }
@@ -69,9 +77,15 @@ impl JsTxType for IDepositPermittableData {
             holder,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
+        let operator = TxOperator {
+            proxy_address: base_fields.proxy,
+            proxy_fee: base_fields.proxy_fee,
+            prover_fee: base_fields.prover_fee,
+        };
+
         Ok(NativeTxType::DepositPermittable(
-            base_fields.fee,
-            base_fields.data.unwrap_or_default(),
+            operator,
+            base_fields.data,
             amount,
             deadline.parse::<u64>().unwrap_or(0),
             holder
@@ -107,10 +121,16 @@ impl JsTxType for ITransferData {
                 amount: out.amount,
             })
             .collect::<Vec<_>>();
+        
+        let operator = TxOperator {
+            proxy_address: base_fields.proxy,
+            proxy_fee: base_fields.proxy_fee,
+            prover_fee: base_fields.prover_fee,
+        };
 
         Ok(NativeTxType::Transfer(
-            base_fields.fee,
-            base_fields.data.unwrap_or_default(),
+            operator,
+            base_fields.data,
             outputs,
         ))
     }
@@ -129,9 +149,15 @@ impl JsMultiTxType for IMultiTransferData {
             })
             .collect::<Vec<_>>();
 
+            let operator = TxOperator {
+                proxy_address: tx.base_fields.proxy,
+                proxy_fee: tx.base_fields.proxy_fee,
+                prover_fee: tx.base_fields.prover_fee,
+            };
+
             NativeTxType::Transfer(
-                tx.base_fields.fee,
-                tx.base_fields.data.unwrap_or_default(),
+                operator,
+                tx.base_fields.data,
                 outputs,
             )
         }).collect();
@@ -161,9 +187,15 @@ impl JsTxType for IWithdrawData {
             energy_amount,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
+        let operator = TxOperator {
+            proxy_address: base_fields.proxy,
+            proxy_fee: base_fields.proxy_fee,
+            prover_fee: base_fields.prover_fee,
+        };
+
         Ok(NativeTxType::Withdraw(
-            base_fields.fee,
-            base_fields.data.unwrap_or_default(),
+            operator,
+            base_fields.data,
             amount,
             to,
             native_amount,
@@ -177,9 +209,15 @@ impl JsMultiTxType for IMultiWithdrawData {
         let array: Vec<WithdrawData> = serde_wasm_bindgen::from_value(self.into())?;
 
         let tx_array = array.into_iter().map(|tx| {
+            let operator = TxOperator {
+                proxy_address: tx.base_fields.proxy,
+                proxy_fee: tx.base_fields.proxy_fee,
+                prover_fee: tx.base_fields.prover_fee,
+            };
+
             NativeTxType::Withdraw(
-                tx.base_fields.fee,
-                tx.base_fields.data.unwrap_or_default(),
+                operator,
+                tx.base_fields.data,
                 tx.amount,
                 tx.to,
                 tx.native_amount,
