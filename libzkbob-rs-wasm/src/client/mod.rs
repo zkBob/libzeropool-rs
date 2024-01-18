@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 use std::str::FromStr;
 
+use libzkbob_rs::libzeropool::native::cipher::MessageEncryptionType;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
@@ -63,13 +64,16 @@ pub struct UserAccount {
 impl UserAccount {
     #[wasm_bindgen(constructor)]
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: &[u8], pool_id: u32, state: UserState) -> Result<UserAccount, JsValue> {
+    pub fn new(sk: &[u8], pool_id: u32, is_new_enc_mode: bool, state: UserState) -> Result<UserAccount, JsValue> {
         crate::utils::set_panic_hook();
 
+        let enc_mode = if is_new_enc_mode {MessageEncryptionType::Symmetric} else { MessageEncryptionType::ECDH };
         let sk = Num::<Fs>::from_uint(NumRepr(Uint::from_little_endian(sk)))
             .ok_or_else(|| js_err!("Invalid spending key"))?;
 
-        let account = NativeUserAccount::new(sk, pool_id, state.inner, POOL_PARAMS.clone());
+
+
+        let account = NativeUserAccount::new(sk, pool_id, enc_mode, state.inner, POOL_PARAMS.clone());
 
         Ok(UserAccount {
             inner: Rc::new(RefCell::new(account)),

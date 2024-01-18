@@ -11,7 +11,7 @@ use libzeropool::{
     native::{
         account::Account,
         boundednum::BoundedNum,
-        cipher,
+        cipher::{self, MessageEncryptionType},
         key::derive_key_p_d,
         note::Note,
         params::PoolParams,
@@ -57,6 +57,8 @@ pub enum CreateTxError {
     InsufficientEnergy(String, String),
     #[error("Failed to serialize transaction: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("Unsupported message encryption scheme ({0})")]
+    EncryptionModeInvalid(u16),
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -113,7 +115,7 @@ impl<Fr: PrimeField> TxOperator<Fr> {
     pub fn serialize(&self, dst: &mut Vec<u8>) {
         dst.append(&mut self.proxy_address.clone());
         let raw_proxy_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
-        let raw_prover_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
+        let raw_prover_fee: u64 = self.prover_fee.to_num().try_into().unwrap();
         dst.write_all(&raw_proxy_fee.to_be_bytes()).unwrap();
         dst.write_all(&raw_prover_fee.to_be_bytes()).unwrap();
     }
@@ -150,6 +152,7 @@ pub enum TxType<Fr: PrimeField> {
 
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
     pub pool_id: u32,
+    pub msg_enc_type: MessageEncryptionType,
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
@@ -163,11 +166,12 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: Num<P::Fs>, pool_id: u32, state: State<D, P>, params: P) -> Self {
+    pub fn new(sk: Num<P::Fs>, pool_id: u32, msg_enc_type: MessageEncryptionType, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
             pool_id,
+            msg_enc_type,
             keys,
             state,
             params,
@@ -176,9 +180,9 @@ where
     }
 
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: u32, state: State<D, P>, params: P) -> Self {
+    pub fn from_seed(seed: &[u8], pool_id: u32, msg_enc_type: MessageEncryptionType, state: State<D, P>, params: P) -> Self {
         let sk = reduce_sk(seed);
-        Self::new(sk, pool_id, state, params)
+        Self::new(sk, pool_id, msg_enc_type, state, params)
     }
 
     fn generate_address_components(
@@ -526,7 +530,11 @@ where
             // No need to include all the zero notes in the encrypted transaction
             let out_notes = &out_notes[0..num_real_out_notes];
 
-            cipher::encrypt(&entropy, &keys.kappa, out_account, out_notes, &self.params)
+            match self.msg_enc_type {
+                MessageEncryptionType::ECDH => cipher::_encrypt_old(&entropy, keys.eta, out_account, out_notes, &self.params),
+                MessageEncryptionType::Symmetric => cipher::encrypt(&entropy, &keys.kappa, out_account, out_notes, &self.params),
+                MessageEncryptionType::Plain => return Err(CreateTxError::EncryptionModeInvalid(self.msg_enc_type.to_u16())),
+            }
         };
 
         // Hash input account + notes filling remaining space with non-hashed zeroes
@@ -592,7 +600,7 @@ where
         memo_data.append(&mut tx_data.clone());
         memo_data.extend((ciphertext.len() as u16).to_be_bytes());
         memo_data.extend(&ciphertext);
-        // TODO: append extra data here
+        // TODO: append extra data here!
 
         let memo_hash = keccak256(&memo_data);
         let memo = Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&memo_hash)));
@@ -683,7 +691,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -706,7 +714,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -730,7 +738,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -757,7 +765,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -785,12 +793,14 @@ mod tests {
         let acc_1 = UserAccount::new(
             Num::ZERO,
             0xffff02,
+            MessageEncryptionType::Symmetric, 
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
             0xffff02,
+            MessageEncryptionType::Symmetric, 
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
@@ -813,6 +823,7 @@ mod tests {
         let mut user_account = UserAccount::new(
             Num::ZERO,
             1,
+            MessageEncryptionType::Symmetric, 
             state,
             POOL_PARAMS.clone()
         );
@@ -864,10 +875,10 @@ mod tests {
 
     #[test]
     fn test_chain_specific_addresses() {
-        let acc_polygon = UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_sepolia = UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism = UserAccount::new(Num::ZERO, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_polygon = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_sepolia = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism = UserAccount::new(Num::ZERO, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
 
         assert!(acc_polygon.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));   // generic without a prefix
         assert!(acc_polygon.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa")); // generic
@@ -905,13 +916,13 @@ mod tests {
     #[test]
     fn test_chain_specific_address_ownable() {
         let accs = [
-            UserAccount::new(Num::ZERO, 0, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 2, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 0xffff02, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 0xffff03, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 2, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff02, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff03, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
         ];
-        let acc2 = UserAccount::new(Num::ONE, 1, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc2 = UserAccount::new(Num::ONE, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
         let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
 

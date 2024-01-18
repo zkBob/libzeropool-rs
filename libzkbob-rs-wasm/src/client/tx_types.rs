@@ -22,11 +22,22 @@ pub trait JsMultiTxType {
 
 #[wasm_bindgen]
 #[derive(Deserialize)]
+pub struct TxExtraData {
+    leaf_index: u8,
+    pad_length: u16,
+    need_encrypt: bool,
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
+}
+
+#[wasm_bindgen]
+#[derive(Deserialize)]
 pub struct TxBaseFields {
+    #[serde(with = "serde_bytes")]
     proxy: Vec<u8>,
     proxy_fee: TokenAmount<Fr>,
     prover_fee: TokenAmount<Fr>,
-    data: Vec<ExtraItem>,
+    data: Vec<TxExtraData>,
 }
 
 #[wasm_bindgen]
@@ -50,9 +61,19 @@ impl JsTxType for IDepositData {
             prover_fee: base_fields.prover_fee,
         };
 
+        let extra = base_fields.data
+            .into_iter()
+            .map(|item| ExtraItem {
+                leaf_index: item.leaf_index,
+                pad_length: item.pad_length,
+                need_encrypt: item.need_encrypt,
+                data: item.data,
+            })
+            .collect::<Vec<_>>();
+
         Ok(NativeTxType::Deposit(
             operator,
-            base_fields.data,
+            extra,
             amount,
         ))
     }
@@ -65,11 +86,16 @@ pub struct DepositPermittableData {
     base_fields: TxBaseFields,
     amount: TokenAmount<Fr>,
     deadline: String,
+    #[serde(with = "serde_bytes")]
     holder: Vec<u8>,
 }
 
 impl JsTxType for IDepositPermittableData {
     fn to_native(&self) -> Result<NativeTxType<Fr>, JsValue> {
+        use web_sys::console;
+
+        console::log_1(&"Beacon #1".into());
+
         let DepositPermittableData {
             base_fields,
             amount,
@@ -77,15 +103,27 @@ impl JsTxType for IDepositPermittableData {
             holder,
         } = serde_wasm_bindgen::from_value(self.into())?;
 
+        console::log_1(&"Beacon #2".into());
+
         let operator = TxOperator {
             proxy_address: base_fields.proxy,
             proxy_fee: base_fields.proxy_fee,
             prover_fee: base_fields.prover_fee,
         };
 
+        let extra = base_fields.data
+            .into_iter()
+            .map(|item| ExtraItem {
+                leaf_index: item.leaf_index,
+                pad_length: item.pad_length,
+                need_encrypt: item.need_encrypt,
+                data: item.data,
+            })
+            .collect::<Vec<_>>();
+
         Ok(NativeTxType::DepositPermittable(
             operator,
-            base_fields.data,
+            extra,
             amount,
             deadline.parse::<u64>().unwrap_or(0),
             holder
@@ -128,9 +166,19 @@ impl JsTxType for ITransferData {
             prover_fee: base_fields.prover_fee,
         };
 
+        let extra = base_fields.data
+            .into_iter()
+            .map(|item| ExtraItem {
+                leaf_index: item.leaf_index,
+                pad_length: item.pad_length,
+                need_encrypt: item.need_encrypt,
+                data: item.data,
+            })
+            .collect::<Vec<_>>();
+
         Ok(NativeTxType::Transfer(
             operator,
-            base_fields.data,
+            extra,
             outputs,
         ))
     }
@@ -150,14 +198,24 @@ impl JsMultiTxType for IMultiTransferData {
             .collect::<Vec<_>>();
 
             let operator = TxOperator {
-                proxy_address: tx.base_fields.proxy,
+                proxy_address: vec![0; 32], //tx.base_fields.proxy,
                 proxy_fee: tx.base_fields.proxy_fee,
                 prover_fee: tx.base_fields.prover_fee,
             };
 
+            let extra = tx.base_fields.data
+            .into_iter()
+            .map(|item| ExtraItem {
+                leaf_index: item.leaf_index,
+                pad_length: item.pad_length,
+                need_encrypt: item.need_encrypt,
+                data: item.data,
+            })
+            .collect::<Vec<_>>();
+
             NativeTxType::Transfer(
                 operator,
-                tx.base_fields.data,
+                extra,
                 outputs,
             )
         }).collect();
@@ -172,6 +230,7 @@ pub struct WithdrawData {
     #[serde(flatten)]
     base_fields: TxBaseFields,
     amount: TokenAmount<Fr>,
+    #[serde(with = "serde_bytes")]
     to: Vec<u8>,
     native_amount: TokenAmount<Fr>,
     energy_amount: TokenAmount<Fr>,
@@ -193,9 +252,19 @@ impl JsTxType for IWithdrawData {
             prover_fee: base_fields.prover_fee,
         };
 
+        let extra = base_fields.data
+            .into_iter()
+            .map(|item| ExtraItem {
+                leaf_index: item.leaf_index,
+                pad_length: item.pad_length,
+                need_encrypt: item.need_encrypt,
+                data: item.data,
+            })
+            .collect::<Vec<_>>();
+
         Ok(NativeTxType::Withdraw(
             operator,
-            base_fields.data,
+            extra,
             amount,
             to,
             native_amount,
@@ -210,14 +279,24 @@ impl JsMultiTxType for IMultiWithdrawData {
 
         let tx_array = array.into_iter().map(|tx| {
             let operator = TxOperator {
-                proxy_address: tx.base_fields.proxy,
+                proxy_address: vec![0; 32], //tx.base_fields.proxy,
                 proxy_fee: tx.base_fields.proxy_fee,
                 prover_fee: tx.base_fields.prover_fee,
             };
 
+            let extra = tx.base_fields.data
+                .into_iter()
+                .map(|item| ExtraItem {
+                    leaf_index: item.leaf_index,
+                    pad_length: item.pad_length,
+                    need_encrypt: item.need_encrypt,
+                    data: item.data,
+                })
+                .collect::<Vec<_>>();
+
             NativeTxType::Withdraw(
                 operator,
-                tx.base_fields.data,
+                extra,
                 tx.amount,
                 tx.to,
                 tx.native_amount,
