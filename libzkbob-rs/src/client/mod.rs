@@ -57,8 +57,6 @@ pub enum CreateTxError {
     InsufficientEnergy(String, String),
     #[error("Failed to serialize transaction: {0}")]
     IoError(#[from] std::io::Error),
-    #[error("Unsupported message encryption scheme ({0})")]
-    EncryptionModeInvalid(u16),
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -112,12 +110,17 @@ pub struct ExtraItem {
 }
 
 impl<Fr: PrimeField> TxOperator<Fr> {
-    pub fn serialize(&self, dst: &mut Vec<u8>) {
-        dst.append(&mut self.proxy_address.clone());
-        let raw_proxy_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
-        let raw_prover_fee: u64 = self.prover_fee.to_num().try_into().unwrap();
-        dst.write_all(&raw_proxy_fee.to_be_bytes()).unwrap();
-        dst.write_all(&raw_prover_fee.to_be_bytes()).unwrap();
+    pub fn serialize(&self, dst: &mut Vec<u8>, is_obsolete_format: bool) {
+        if is_obsolete_format {
+            let raw_fee: u64 = self.total_fee().try_into().unwrap();
+            dst.write_all(&raw_fee.to_be_bytes()).unwrap();
+        } else {
+            dst.append(&mut self.proxy_address.clone());
+            let raw_proxy_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
+            let raw_prover_fee: u64 = self.prover_fee.to_num().try_into().unwrap();
+            dst.write_all(&raw_proxy_fee.to_be_bytes()).unwrap();
+            dst.write_all(&raw_prover_fee.to_be_bytes()).unwrap();
+        }
     }
 
     pub fn total_fee(&self) -> Num<Fr> {
@@ -152,7 +155,7 @@ pub enum TxType<Fr: PrimeField> {
 
 pub struct UserAccount<D: KeyValueDB, P: PoolParams> {
     pub pool_id: u32,
-    pub msg_enc_type: MessageEncryptionType,
+    pub is_obsolete_pool: bool,
     pub keys: Keys<P>,
     pub params: P,
     pub state: State<D, P>,
@@ -166,12 +169,12 @@ where
     P::Fr: 'static,
 {
     /// Initializes UserAccount with a spending key that has to be an element of the prime field Fs (p = 6554484396890773809930967563523245729705921265872317281365359162392183254199).
-    pub fn new(sk: Num<P::Fs>, pool_id: u32, msg_enc_type: MessageEncryptionType, state: State<D, P>, params: P) -> Self {
+    pub fn new(sk: Num<P::Fs>, pool_id: u32, is_obsolete_pool: bool, state: State<D, P>, params: P) -> Self {
         let keys = Keys::derive(sk, &params);
 
         UserAccount {
             pool_id,
-            msg_enc_type,
+            is_obsolete_pool,
             keys,
             state,
             params,
@@ -367,24 +370,24 @@ where
             let mut tx_data: Vec<u8> = vec![];
             match &tx {
                 TxType::Deposit(operator, user_data, _) => {
-                    operator.serialize(&mut tx_data);
+                    operator.serialize(&mut tx_data, self.is_obsolete_pool);
 
                     (operator.total_fee(), tx_data, user_data)
                 }
                 TxType::DepositPermittable(operator, user_data, _, deadline, holder) => {
-                    operator.serialize(&mut tx_data);
+                    operator.serialize(&mut tx_data, self.is_obsolete_pool);
                     tx_data.write_all(&deadline.to_be_bytes()).unwrap();
                     tx_data.append(&mut holder.clone());
                     
                     (operator.total_fee(), tx_data, user_data)
                 }
                 TxType::Transfer(operator, user_data, _) => {
-                    operator.serialize(&mut tx_data);
+                    operator.serialize(&mut tx_data, self.is_obsolete_pool);
 
                     (operator.total_fee(), tx_data, user_data)
                 }
                 TxType::Withdraw(operator, user_data, _, reciever, native_amount, _) => {
-                    operator.serialize(&mut tx_data);
+                    operator.serialize(&mut tx_data, self.is_obsolete_pool);
                     let raw_native_amount: u64 = native_amount.to_num().try_into().unwrap();
                     tx_data.write_all(&raw_native_amount.to_be_bytes()).unwrap();
                     tx_data.append(&mut reciever.clone());
@@ -530,10 +533,9 @@ where
             // No need to include all the zero notes in the encrypted transaction
             let out_notes = &out_notes[0..num_real_out_notes];
 
-            match self.msg_enc_type {
-                MessageEncryptionType::ECDH => cipher::_encrypt_old(&entropy, keys.eta, out_account, out_notes, &self.params),
-                MessageEncryptionType::Symmetric => cipher::encrypt(&entropy, &keys.kappa, out_account, out_notes, &self.params),
-                MessageEncryptionType::Plain => return Err(CreateTxError::EncryptionModeInvalid(self.msg_enc_type.to_u16())),
+            match self.is_obsolete_pool {
+                true => cipher::_encrypt_old(&entropy, keys.eta, out_account, out_notes, &self.params), // ECDH scheme
+                false => cipher::encrypt(&entropy, &keys.kappa, out_account, out_notes, &self.params),  // symmetric scheme
             }
         };
 
@@ -588,17 +590,22 @@ where
 
         let root: Num<P::Fr> = tree.get_root_optimistic(&mut virtual_nodes, &update_boundaries);
 
-        // memo = tx_specific_data, ciphertext, user_defined_data
+        // TODO: prepare (encrypt) extra data
+
+        // memo = tx_specific_data, ciphertext, extra_data
         let mut memo_data = {
             let tx_data_size = tx_data.len();
             let ciphertext_size = ciphertext.len();
-            let user_data_size = user_data.len();
+            let user_data_size = 0; //user_data.len();
             Vec::with_capacity(tx_data_size + ciphertext_size + user_data_size)
         };
 
         #[allow(clippy::redundant_clone)]
         memo_data.append(&mut tx_data.clone());
-        memo_data.extend((ciphertext.len() as u16).to_be_bytes());
+        if !self.is_obsolete_pool {
+            // add message size for new memo format
+            memo_data.extend((ciphertext.len() as u16).to_be_bytes());
+        }
         memo_data.extend(&ciphertext);
         // TODO: append extra data here!
 
