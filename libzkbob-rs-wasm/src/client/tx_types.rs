@@ -94,16 +94,12 @@ impl JsTxType for IDepositPermittableData {
     fn to_native(&self) -> Result<NativeTxType<Fr>, JsValue> {
         use web_sys::console;
 
-        console::log_1(&"Beacon #1".into());
-
         let DepositPermittableData {
             base_fields,
             amount,
             deadline,
             holder,
         } = serde_wasm_bindgen::from_value(self.into())?;
-
-        console::log_1(&"Beacon #2".into());
 
         let operator = TxOperator {
             proxy_address: base_fields.proxy,

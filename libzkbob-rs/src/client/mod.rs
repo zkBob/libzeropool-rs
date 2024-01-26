@@ -11,7 +11,7 @@ use libzeropool::{
     native::{
         account::Account,
         boundednum::BoundedNum,
-        cipher::{self, MessageEncryptionType},
+        cipher,
         key::derive_key_p_d,
         note::Note,
         params::PoolParams,
@@ -183,9 +183,9 @@ where
     }
 
     /// Same as constructor but accepts arbitrary data as spending key.
-    pub fn from_seed(seed: &[u8], pool_id: u32, msg_enc_type: MessageEncryptionType, state: State<D, P>, params: P) -> Self {
+    pub fn from_seed(seed: &[u8], pool_id: u32, is_obsolete_pool: bool, state: State<D, P>, params: P) -> Self {
         let sk = reduce_sk(seed);
-        Self::new(sk, pool_id, msg_enc_type, state, params)
+        Self::new(sk, pool_id, is_obsolete_pool, state, params)
     }
 
     fn generate_address_components(
@@ -366,7 +366,7 @@ where
                 .unwrap_or_else(|| self.state.tree.next_index())
         }));
 
-        let (fee, tx_data, user_data) = {
+        let (fee, tx_data, _user_data) = {
             let mut tx_data: Vec<u8> = vec![];
             match &tx {
                 TxType::Deposit(operator, user_data, _) => {

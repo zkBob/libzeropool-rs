@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::{cell::RefCell, convert::TryInto};
 use std::str::FromStr;
-
-use libzkbob_rs::libzeropool::native::cipher::MessageEncryptionType;
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
