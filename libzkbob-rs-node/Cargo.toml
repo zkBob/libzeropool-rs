@@ -23,5 +23,5 @@ hex = "0.4.3"
 git = "https://github.com/zkbob/fawkes-crypto"
 branch = "master"
 package = "fawkes-crypto-zkbob"
-version = "4.6.0"
+version = "4.7.0"
 features = ["multicore"]    

@@ -92,8 +92,6 @@ pub struct DepositPermittableData {
 
 impl JsTxType for IDepositPermittableData {
     fn to_native(&self) -> Result<NativeTxType<Fr>, JsValue> {
-        use web_sys::console;
-
         let DepositPermittableData {
             base_fields,
             amount,
