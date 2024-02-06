@@ -698,7 +698,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, false, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -721,7 +721,7 @@ mod tests {
     #[test]
     fn test_create_tx_deposit_one() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, false, state, POOL_PARAMS.clone());
 
         let op = TxOperator {
             proxy_address: vec![],
@@ -745,7 +745,7 @@ mod tests {
     #[test]
     fn test_create_tx_transfer_zero() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, false, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -772,7 +772,7 @@ mod tests {
     #[should_panic]
     fn test_create_tx_transfer_one_no_balance() {
         let state = State::init_test(POOL_PARAMS.clone());
-        let acc = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, state, POOL_PARAMS.clone());
+        let acc = UserAccount::new(Num::ZERO, 0, false, state, POOL_PARAMS.clone());
 
         let addr = acc.generate_address();
 
@@ -800,14 +800,14 @@ mod tests {
         let acc_1 = UserAccount::new(
             Num::ZERO,
             0xffff02,
-            MessageEncryptionType::Symmetric, 
+            false, 
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
         let acc_2 = UserAccount::new(
             Num::ONE,
             0xffff02,
-            MessageEncryptionType::Symmetric, 
+            false, 
             State::init_test(POOL_PARAMS.clone()),
             POOL_PARAMS.clone(),
         );
@@ -830,7 +830,7 @@ mod tests {
         let mut user_account = UserAccount::new(
             Num::ZERO,
             1,
-            MessageEncryptionType::Symmetric, 
+            false, 
             state,
             POOL_PARAMS.clone()
         );
@@ -882,10 +882,10 @@ mod tests {
 
     #[test]
     fn test_chain_specific_addresses() {
-        let acc_polygon = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_sepolia = UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism = UserAccount::new(Num::ZERO, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
-        let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_polygon = UserAccount::new(Num::ZERO, 0, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_sepolia = UserAccount::new(Num::ZERO, 0, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism = UserAccount::new(Num::ZERO, 1, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc_optimism_eth = UserAccount::new(Num::ZERO, 2, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
 
         assert!(acc_polygon.validate_universal_address("PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa"));   // generic without a prefix
         assert!(acc_polygon.validate_universal_address("zkbob:PtfsqyJhA2yvmLtXBm55pkvFDX6XZrRMaib9F1GvwzmU8U4witUf8Jyse5kxBwa")); // generic
@@ -923,13 +923,13 @@ mod tests {
     #[test]
     fn test_chain_specific_address_ownable() {
         let accs = [
-            UserAccount::new(Num::ZERO, 0, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 2, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 0xffff02, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
-            UserAccount::new(Num::ZERO, 0xffff03, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 1, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 2, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff02, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
+            UserAccount::new(Num::ZERO, 0xffff03, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone()),
         ];
-        let acc2 = UserAccount::new(Num::ONE, 1, MessageEncryptionType::Symmetric, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
+        let acc2 = UserAccount::new(Num::ONE, 1, false, State::init_test(POOL_PARAMS.clone()), POOL_PARAMS.clone());
         let pool_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_address()).collect();
         let universal_addresses: Vec<String> = accs.iter().map(|acc| acc.generate_universal_address()).collect();
 
