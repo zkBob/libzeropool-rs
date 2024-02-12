@@ -131,48 +131,52 @@ impl TxParser {
 
         let txs: Vec<IndexedTx> = serde_wasm_bindgen::from_value(txs.to_owned()).map_err(|err| js_err!(&err.to_string()))?;
 
-        let (parse_results, parse_errors): (Vec<_>, Vec<_>) = vec_into_iter(txs)
-            .map(|tx| -> Result<ParseResult, ParseError> {
+        let parse_results: Vec<_> = vec_into_iter(txs)
+            .map(|tx| -> ParseResult {
                 let IndexedTx{index, memo, commitment} = tx;
                 let memo = hex::decode(memo).unwrap();
                 let commitment = hex::decode(commitment).unwrap();
                 
-                parse_tx(index, &commitment, &memo, None, &eta, kappa, params)
-            })
-            .partition(Result::is_ok);
-
-        if parse_errors.is_empty() {
-            let parse_result = parse_results
-                .into_iter()
-                .map(Result::unwrap)
-                .fold(Default::default(), |acc: ParseResult, parse_result| {
-                    ParseResult {
-                        decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
-                        state_update: StateUpdate {
-                            new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
-                            new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
-                            new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
-                            new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
+                match parse_tx(index, &commitment, &memo, None, &eta, kappa, params) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        console::log_1(&format!("[WASM TxParser] ERROR for tx with index {}: {}", err.index(), err.to_string()).into());
+                        // Skip transaction in case of parsing errors (assume it doesn't belongs to the our account)
+                        ParseResult {
+                            state_update: StateUpdate {
+                                new_commitments: vec![(
+                                    index,
+                                    Num::from_uint_reduced(NumRepr(Uint::from_big_endian(
+                                        &commitment,
+                                    ))),
+                                )],
+                                ..Default::default()
+                            },
+                            ..Default::default()
                         }
                     }
-            });
+                }
+            })
+            .collect();
 
-            let parse_result = serde_wasm_bindgen::to_value(&parse_result)
-                .unwrap()
-                .unchecked_into::<ParseTxsResult>();
-            Ok(parse_result)
-        } else {
-            let errors: Vec<_> = parse_errors
-                .into_iter()
-                .map(|err| -> ParseError {
-                    let err = err.unwrap_err();
-                    console::log_1(&format!("[WASM TxParser] ERROR: {}", err.to_string()).into());
-                    err
-                })
-                .collect();
-            let all_errs: Vec<u64> = errors.into_iter().map(|err| err.index()).collect();
-            Err(js_err!("The following txs cannot be processed: {:?}", all_errs))
-        }
+        let parse_result = parse_results
+            .into_iter()
+            .fold(Default::default(), |acc: ParseResult, parse_result| {
+                ParseResult {
+                    decrypted_memos: vec![acc.decrypted_memos, parse_result.decrypted_memos].concat(),
+                    state_update: StateUpdate {
+                        new_leafs: vec![acc.state_update.new_leafs, parse_result.state_update.new_leafs].concat(),
+                        new_commitments: vec![acc.state_update.new_commitments, parse_result.state_update.new_commitments].concat(),
+                        new_accounts: vec![acc.state_update.new_accounts, parse_result.state_update.new_accounts].concat(),
+                        new_notes: vec![acc.state_update.new_notes, parse_result.state_update.new_notes].concat()
+                    }
+                }
+        });
+
+        let parse_result = serde_wasm_bindgen::to_value(&parse_result)
+            .unwrap()
+            .unchecked_into::<ParseTxsResult>();
+        Ok(parse_result)
     }
 
     #[wasm_bindgen(js_name = "extractDecryptKeys")]
