@@ -48,7 +48,7 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    pub fn index(&self) -> u64 {
+    pub fn _index(&self) -> u64 {
         match *self {
             ParseError::NoPrefix(idx)  => idx,
             ParseError::IncorrectPrefix(idx,  _, _)  => idx,
@@ -140,7 +140,7 @@ impl TxParser {
                 match parse_tx(index, &commitment, &memo, None, &eta, kappa, params) {
                     Ok(res) => res,
                     Err(err) => {
-                        console::log_1(&format!("[WASM TxParser] ERROR for tx with index {}: {}", err.index(), err.to_string()).into());
+                        console::log_1(&format!("[WASM TxParser] ERROR: {}", err.to_string()).into());
                         // Skip transaction in case of parsing errors (assume it doesn't belongs to the our account)
                         ParseResult {
                             state_update: StateUpdate {
@@ -246,7 +246,7 @@ pub fn parse_tx(
     }
 
     let (num_items, enc_type) =
-        cipher::parse_memo_header(&mut memo.as_slice()).ok_or(ParseError::NoPrefix(0))?;
+        cipher::parse_memo_header(&mut memo.as_slice()).ok_or(ParseError::NoPrefix(index))?;
 
     if num_items > constants::OUT + 1 {
         return Err(ParseError::IncorrectPrefix(

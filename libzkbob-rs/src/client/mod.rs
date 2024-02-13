@@ -595,9 +595,10 @@ where
         // memo = tx_specific_data, ciphertext, extra_data
         let mut memo_data = {
             let tx_data_size = tx_data.len();
+            let ciphertext_size_size = if self.is_obsolete_pool { 0 } else { 2 };
             let ciphertext_size = ciphertext.len();
             let user_data_size = 0; //user_data.len();
-            Vec::with_capacity(tx_data_size + ciphertext_size + user_data_size)
+            Vec::with_capacity(tx_data_size + ciphertext_size_size + ciphertext_size + user_data_size)
         };
 
         #[allow(clippy::redundant_clone)]
