@@ -2,7 +2,7 @@
 
 PARENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
 
-npm publish $PARENT_DIR/web --tag beta
-npm publish $PARENT_DIR/web-mt --tag beta
+npm publish $PARENT_DIR/web
+npm publish $PARENT_DIR/web-mt
 #npm publish $PARENT_DIR/web-debug
 #npm publish $PARENT_DIR/web-mt-debug
