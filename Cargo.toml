@@ -13,7 +13,7 @@ default-members = [
 ]
 
 [patch."https://github.com/zkbob/libzeropool-zkbob"]
-libzeropool = { git = "https://github.com/zkbob//libzeropool-zkbob", branch = "enc-memo-message-tune", package = "libzeropool-zkbob" }
+libzeropool = { git = "https://github.com/zkbob/libzeropool-zkbob", branch = "devel", package = "libzeropool-zkbob" }
 
 [patch.crates-io]
-libzeropool = { git = "https://github.com/zkbob//libzeropool-zkbob", branch = "enc-memo-message-tune", package = "libzeropool-zkbob" }
+libzeropool = { git = "https://github.com/zkbob/libzeropool-zkbob", branch = "devel", package = "libzeropool-zkbob" }
