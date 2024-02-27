@@ -1,5 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-TAG=beta
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-$SCRIPT_DIR/publish
+PARENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
+
+npm publish $PARENT_DIR/web --tag beta
+npm publish $PARENT_DIR/web-mt --tag beta

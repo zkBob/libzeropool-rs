@@ -1,4 +1,4 @@
-use crate::{Fr, IDepositData, IDepositPermittableData, ITransferData, IWithdrawData, IMultiTransferData, IMultiWithdrawData};
+use crate::{Fr, IDepositData, IDepositPermittableData, ITransferData, IWithdrawData };
 use libzkbob_rs::client::{TokenAmount, TxOutput, TxType as NativeTxType, ExtraItem, TxOperator};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -14,10 +14,6 @@ pub enum TxType {
 
 pub trait JsTxType {
     fn to_native(&self) -> Result<NativeTxType<Fr>, JsValue>;
-}
-
-pub trait JsMultiTxType {
-    fn to_native_array(&self) -> Result<Vec<NativeTxType<Fr>>, JsValue>;
 }
 
 #[wasm_bindgen]
@@ -178,46 +174,6 @@ impl JsTxType for ITransferData {
     }
 }
 
-impl JsMultiTxType for IMultiTransferData {
-    fn to_native_array(&self) -> Result<Vec<NativeTxType<Fr>>, JsValue> {
-        let array: Vec<TransferData> = serde_wasm_bindgen::from_value(self.into())?;
-
-        let tx_array = array.into_iter().map(|tx| {
-            let outputs = tx.outputs
-            .into_iter()
-            .map(|out| TxOutput {
-                to: out.to,
-                amount: out.amount,
-            })
-            .collect::<Vec<_>>();
-
-            let operator = TxOperator {
-                proxy_address: vec![0; 32], //tx.base_fields.proxy,
-                proxy_fee: tx.base_fields.proxy_fee,
-                prover_fee: tx.base_fields.prover_fee,
-            };
-
-            let extra = tx.base_fields.data
-            .into_iter()
-            .map(|item| ExtraItem {
-                leaf_index: item.leaf_index,
-                pad_length: item.pad_length,
-                need_encrypt: item.need_encrypt,
-                data: item.data,
-            })
-            .collect::<Vec<_>>();
-
-            NativeTxType::Transfer(
-                operator,
-                extra,
-                outputs,
-            )
-        }).collect();
-
-        Ok(tx_array)
-    }
-}
-
 #[wasm_bindgen]
 #[derive(Deserialize)]
 pub struct WithdrawData {
@@ -264,40 +220,5 @@ impl JsTxType for IWithdrawData {
             native_amount,
             energy_amount,
         ))
-    }
-}
-
-impl JsMultiTxType for IMultiWithdrawData {
-    fn to_native_array(&self) -> Result<Vec<NativeTxType<Fr>>, JsValue> {
-        let array: Vec<WithdrawData> = serde_wasm_bindgen::from_value(self.into())?;
-
-        let tx_array = array.into_iter().map(|tx| {
-            let operator = TxOperator {
-                proxy_address: vec![0; 32], //tx.base_fields.proxy,
-                proxy_fee: tx.base_fields.proxy_fee,
-                prover_fee: tx.base_fields.prover_fee,
-            };
-
-            let extra = tx.base_fields.data
-                .into_iter()
-                .map(|item| ExtraItem {
-                    leaf_index: item.leaf_index,
-                    pad_length: item.pad_length,
-                    need_encrypt: item.need_encrypt,
-                    data: item.data,
-                })
-                .collect::<Vec<_>>();
-
-            NativeTxType::Withdraw(
-                operator,
-                extra,
-                tx.amount,
-                tx.to,
-                tx.native_amount,
-                tx.energy_amount,
-            )
-        }).collect();
-
-        Ok(tx_array)
     }
 }

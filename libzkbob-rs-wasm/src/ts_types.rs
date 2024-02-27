@@ -283,14 +283,8 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "ITransferData")]
     pub type ITransferData;
 
-    #[wasm_bindgen(typescript_type = "ITransferData[]")]
-    pub type IMultiTransferData;
-
     #[wasm_bindgen(typescript_type = "IWithdrawData")]
     pub type IWithdrawData;
-
-    #[wasm_bindgen(typescript_type = "IWithdrawData[]")]
-    pub type IMultiWithdrawData;
 
     #[wasm_bindgen(typescript_type = "DecryptedMemo")]
     pub type DecryptedMemo;
