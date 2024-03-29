@@ -31,6 +31,8 @@ pub struct TxExtraData {
 pub struct TxBaseFields {
     #[serde(with = "serde_bytes")]
     proxy: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    prover: Vec<u8>,
     proxy_fee: TokenAmount<Fr>,
     prover_fee: TokenAmount<Fr>,
     data: Vec<TxExtraData>,
@@ -53,6 +55,7 @@ impl JsTxType for IDepositData {
 
         let operator = TxOperator {
             proxy_address: base_fields.proxy,
+            prover_address: base_fields.prover,
             proxy_fee: base_fields.proxy_fee,
             prover_fee: base_fields.prover_fee,
         };
@@ -97,6 +100,7 @@ impl JsTxType for IDepositPermittableData {
 
         let operator = TxOperator {
             proxy_address: base_fields.proxy,
+            prover_address: base_fields.prover,
             proxy_fee: base_fields.proxy_fee,
             prover_fee: base_fields.prover_fee,
         };
@@ -152,6 +156,7 @@ impl JsTxType for ITransferData {
         
         let operator = TxOperator {
             proxy_address: base_fields.proxy,
+            prover_address: base_fields.prover,
             proxy_fee: base_fields.proxy_fee,
             prover_fee: base_fields.prover_fee,
         };
@@ -198,6 +203,7 @@ impl JsTxType for IWithdrawData {
 
         let operator = TxOperator {
             proxy_address: base_fields.proxy,
+            prover_address: base_fields.prover,
             proxy_fee: base_fields.proxy_fee,
             prover_fee: base_fields.prover_fee,
         };

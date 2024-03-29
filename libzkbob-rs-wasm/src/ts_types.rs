@@ -128,6 +128,7 @@ export interface IExtraItem {
 
 export interface ITxBaseFields {
     proxy: Uint8Array;
+    prover: Uint8Array;
     proxy_fee: string;
     prover_fee: string;
     data: IExtraItem[];

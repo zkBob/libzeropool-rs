@@ -95,6 +95,7 @@ pub struct TxOutput<Fr: PrimeField> {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TxOperator<Fr: PrimeField> {
     pub proxy_address: Vec<u8>,
+    pub prover_address: Vec<u8>,
     pub proxy_fee: TokenAmount<Fr>,
     pub prover_fee: TokenAmount<Fr>,
 }
@@ -116,6 +117,7 @@ impl<Fr: PrimeField> TxOperator<Fr> {
             dst.write_all(&raw_fee.to_be_bytes()).unwrap();
         } else {
             dst.append(&mut self.proxy_address.clone());
+            dst.append(&mut self.prover_address.clone());
             let raw_proxy_fee: u64 = self.proxy_fee.to_num().try_into().unwrap();
             let raw_prover_fee: u64 = self.prover_fee.to_num().try_into().unwrap();
             dst.write_all(&raw_proxy_fee.to_be_bytes()).unwrap();
@@ -703,6 +705,7 @@ mod tests {
 
         let op = TxOperator {
             proxy_address: vec![],
+            prover_address: vec![],
             proxy_fee: BoundedNum::ZERO,
             prover_fee: BoundedNum::ZERO,
         };
@@ -726,6 +729,7 @@ mod tests {
 
         let op = TxOperator {
             proxy_address: vec![],
+            prover_address: vec![],
             proxy_fee: BoundedNum::ZERO,
             prover_fee: BoundedNum::ONE,
         };
@@ -757,6 +761,7 @@ mod tests {
 
         let op = TxOperator {
             proxy_address: vec![],
+            prover_address: vec![],
             proxy_fee: BoundedNum::ZERO,
             prover_fee: BoundedNum::ZERO,
         };
@@ -784,6 +789,7 @@ mod tests {
 
         let op = TxOperator {
             proxy_address: vec![],
+            prover_address: vec![],
             proxy_fee: BoundedNum::ZERO,
             prover_fee: BoundedNum::ZERO,
         };
