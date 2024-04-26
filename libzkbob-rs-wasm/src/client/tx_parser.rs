@@ -71,6 +71,7 @@ pub struct StateUpdate {
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct DecMemo {
     pub index: u64,
+    pub commitment: Option<Hash<Fr>>,
     pub acc: Option<NativeAccount<Fr>>,
     #[serde(rename = "inNotes")]
     pub in_notes: Vec<IndexedNote>,
@@ -301,6 +302,7 @@ pub fn parse_tx(
                     ParseResult {
                         decrypted_memos: vec![DecMemo {
                             index,
+                            commitment: Some(Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)))),
                             in_notes: in_notes_indexed,
                             tx_hash: match tx_hash {
                                 Some(bytes) => Some(format!("0x{}", hex::encode(bytes))),
@@ -354,6 +356,7 @@ pub fn parse_tx(
                     Ok(ParseResult {
                         decrypted_memos: vec![DecMemo {
                             index,
+                            commitment: Some(Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)))),
                             acc: Some(account),
                             in_notes: in_notes
                                 .iter()
@@ -399,6 +402,7 @@ pub fn parse_tx(
                         Ok(ParseResult {
                             decrypted_memos: vec![DecMemo {
                                 index,
+                                commitment: Some(Num::from_uint_reduced(NumRepr(Uint::from_big_endian(&commitment)))),
                                 in_notes: in_notes
                                     .iter()
                                     .map(|(index, note)| IndexedNote {
